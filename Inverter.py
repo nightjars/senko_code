@@ -1,6 +1,7 @@
 import threading
 import DataStructures
 import numpy as np
+from scipy import optimize
 from datetime import datetime as dt
 import time as Time
 import logging
@@ -47,10 +48,9 @@ class InverterThread(threading.Thread):
             sub_inputs = np.vstack([sub_inputs, smooth_mat])
             present_sub_inputs = np.take(sub_inputs, np.argwhere(mask > 0)[:, 0])
 
-            # nnls
+            solution = optimize.nnls(sub_inputs, offset[0])[0]
 
-            solution = np.copy(sub_inputs)  # need scipy
-            calc_offset = np.copy(solution) #sub_inputs.dot(solution)
+            calc_offset = sub_inputs.dot(solution)
 
             output = self.generate_output(solution, kalman_data['kalman_data'], site_correlate,
                                           calc_offset, sites, faults)
@@ -102,7 +102,7 @@ class InverterThread(threading.Thread):
                 slip.append(temp)
 
         for idx, site in enumerate(correlate):
-            kalman_site = kalman_data[site['name']]
+            kalman_site = [x['kalman_data'] for x in kalman_data if x['kalman_data']['site'] is site[1]['name']][0]
             final_calc.append([
                 kalman_site['site'],
                 kalman_site['la'],
