@@ -135,7 +135,7 @@ class DataRouter:
         while not self.terminated:
             completed_inversion = self.completed_inversion_queue.get()
             self.completed_data_count += 1
-            self.logger.info("Just completed {}".format(completed_inversion['kalman_data'][0]['kalman_data']))
+            self.logger.info("Just completed {}".format(completed_inversion['inverter_data']))
             self.logger.info("Time beginning->end: {} seconds".format(
                 completed_inversion['timestamps']['invert_end'] -
                 completed_inversion['kalman_data'][0]['pre_kalman'][0]['timestamps']['data_received']))

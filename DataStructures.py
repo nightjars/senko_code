@@ -38,7 +38,8 @@ configuration = {
     'smoothing': True,
     'corner_fix': True,
     'short_smoothing': True,
-    'strike_slip': False
+    'strike_slip': False,
+    'float_equality': 1e-9
 }
 
 

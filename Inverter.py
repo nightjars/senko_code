@@ -5,6 +5,7 @@ from scipy import optimize
 from datetime import datetime as dt
 import time as Time
 import logging
+import math
 
 class InverterThread(threading.Thread):
     def __init__(self, input_queue, output_queue):
@@ -17,7 +18,7 @@ class InverterThread(threading.Thread):
     def run(self):
         while not self.terminate:
             (time, kalman_data, sites, faults) = self.input_queue.get()
-            self.logger.info("Got a group for time {} with {} kalman sets in it".format(time, len(kalman_data['kalman_data'])))
+            self.logger.debug("Got a group for time {} with {} kalman sets in it".format(time, len(kalman_data['kalman_data'])))
             kalman_data = DataStructures.get_grouped_inversion_queue_message(prev_message=kalman_data,
                                                                           inverter_begin=True)
 
@@ -56,7 +57,7 @@ class InverterThread(threading.Thread):
                                           calc_offset, sites, faults)
 
             kalman_data = DataStructures.get_grouped_inversion_queue_message(prev_message=kalman_data,
-                                                                             inverter_data="inverter output")
+                                                                             inverter_data=output)
             self.output_queue.put(kalman_data)
 
     def generate_output(self, solution, kalman_data, correlate, calc_offset, sites, faults):
@@ -83,8 +84,8 @@ class InverterThread(threading.Thread):
                 sol
             ])
 
-            #magnitude += float(fault_sol[-1][6]) * float(fault_sol[-1][7]) * float(1e12) *          \
-            #             np.abs(float(fault_sol[-1][8]))
+            magnitude += float(fault_sol[-1][6]) * float(fault_sol[-1][7]) * float(1e12) *          \
+                         np.abs(float(fault_sol[-1][8]))
 
         magnitude *= float(3e11)
 
@@ -132,7 +133,8 @@ class InverterThread(threading.Thread):
         for calc in final_calc:
             estimates.append(calc[0:10])
 
-        mw = "NA" if magnitude is 0 else "{:.1f}".format(2/3. * np.log10(magnitude) - 10.7)
+        mw = "NA" if math.isclose(0, magnitude, rel_tol=DataStructures.configuration['float_equality']) else \
+            "{:.1f}".format(2/3. * np.log10(magnitude) - 10.7)
         magnitude_str = "{:.2E}".format(magnitude)
 
         output = {
@@ -144,6 +146,8 @@ class InverterThread(threading.Thread):
             'Moment': magnitude_str,
             'Magnitude': mw
         }
+        return output
+
     def terminate(self):
         self.terminate = True
 

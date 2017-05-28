@@ -14,7 +14,7 @@ import logging
 class LiveFilter:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
-        logging.basicConfig(level=logging.DEBUG, format='%(relativeCreated)6d %(threadName)s %(message)s')
+        logging.basicConfig(level=logging.INFO, format='%(relativeCreated)6d %(threadName)s %(message)s')
 
         self.logger.info("LiveFilter starting.")
         self.config = DataLoader.load_data_from_text_files(sites_data_file=DataStructures.configuration['sites_file'],
