@@ -4,10 +4,12 @@ import time
 import random
 import calendar
 import numpy as np
+import logging
 
 
 class KalmanThread(threading.Thread):
     def __init__(self, input_queue, output_queue):
+        self.logger = logging.getLogger(__name__)
         self.input_queue = input_queue
         self.output_queue = output_queue
         self.terminate = False
@@ -18,12 +20,14 @@ class KalmanThread(threading.Thread):
             kalman = self.input_queue.get()
             if kalman is not None:
                 if kalman['lock'].acquire(False):
+                    self.logger.info("{} beginning processing {}".format(self, kalman['site']))
                     while not kalman['measurement_queue'].empty():
                         (_, _, measurement) = kalman['measurement_queue'].get()
                         kalman['data_set'].append(DataStructures.get_gps_data_queue_message(measurement,
                                                     kalman_filter_step=True))
                         self.process_measurement(kalman)
                     kalman['lock'].release()
+                    self.logger.info("{} finished processing {}".format(self, kalman['site']))
                 else:
                     pass
 
