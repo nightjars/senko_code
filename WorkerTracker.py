@@ -6,6 +6,7 @@ import ValidatorThread
 import Kalman
 import Inverter
 import logging
+import OutputGenerator
 
 class WorkerTracker:
     def __init__(self, router, config):
@@ -16,14 +17,19 @@ class WorkerTracker:
         self.reporter_threads = []
         self.validator_threads = []
         self.router = router
+        self.output_generator = None
         self.terminate = False
-        self.tracker_thread = threading.Thread(target = self.run, args = ())
+        self.tracker_thread = threading.Thread(target=self.run, args=())
         self.tracker_thread.start()
         self.config = config
 
     def run(self):
-        self.router_threads.append(threading.Thread(target = self.router.router_loop, args = ()))
+        self.router_threads.append(threading.Thread(target=self.router.router_loop, args=()))
         self.router_threads[-1].start()
+
+        self.output_generator = OutputGenerator.OutputGeneratorThread(
+            self.router.completed_inversion_queue)
+        self.output_generator.start()
 
         counter = 0
         while not self.terminate:
@@ -46,7 +52,7 @@ class WorkerTracker:
                 for _, value in self.router.kalman_map.items():
                     if value['lock'].locked():
                         locked_kalmans += 1
-                        self.logger.info("{} of {} kalman states are locked.".format(locked_kalmans,
+                self.logger.info("{} of {} kalman states are locked.".format(locked_kalmans,
                                                                                      len(self.router.kalman_map)))
 
             if self.router.data_validator_queue.qsize() >= DataStructures.configuration['validator_queue_threshold']:

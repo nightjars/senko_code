@@ -3,6 +3,8 @@ import DataLoader
 import threading
 import random
 import time
+import calendar
+import amqp
 
 class MeasurementPoller:
     def __init__(self, output_queue):
@@ -19,6 +21,37 @@ class MeasurementPoller:
         self.terminated = True
 
 
+class RabbitMQPoller(MeasurementPoller):
+
+    def __init__(self, output_queue):
+        super(RabbitMQPoller, self).__init__(output_queue)
+        threading.Thread(target=self.rabbit_poller).start()
+
+    @staticmethod
+    def message_callback(ch, method, properties, body):
+        print ("callback")
+        print (body)
+
+    def rabbit_poller(self):
+        connection = amqp.Connection(
+            host=DataStructures.configuration['rabbit_mq']['host'],
+            userid=DataStructures.configuration['rabbit_mq']['userid'],
+            password=DataStructures.configuration['rabbit_mq']['password'],
+            virtual_host=None, #DataStructures.configuration['rabbit_mq']['virtual_host'],
+            exchange=DataStructures.configuration['rabbit_mq']['exchange_name']
+        )
+        print ("about to connect")
+        connection.connect()
+        print("connected")
+        channel = connection.channel()
+        channel.exchange_declare(DataStructures.configuration['rabbit_mq']['exchange_name'],
+                                 'test_fanout', passive=True)
+        queue_name = channel.queue_declare(exclusive=True)[0]
+        channel.queue_bind(queue_name, exchange=DataStructures.configuration['rabbit_mq']['exchange_name'])
+        channel.basic_consume(RabbitMQPoller.message_callback, queue=DataStructures.configuration['rabbit_mq']['exchange_name'])
+        print ("about to start consuming")
+        channel.start_consuming()
+
 class NonsensePoller(MeasurementPoller):
     def __init__(self, output_queue):
         super(NonsensePoller, self).__init__(output_queue)
@@ -27,24 +60,25 @@ class NonsensePoller(MeasurementPoller):
         threading.Thread(target=self.nonsense_generator).start()
 
     def nonsense_generator(self):
-        cur_time = 0
         site_list = list(self.config['sites'].keys())
         while not self.terminated:
             for x in range(100):
-                if random.random() < .3:
-                    cur_time += 1
+                cur_time = calendar.timegm(time.gmtime()) -  \
+                    random.randint(0, 17)
                 new_data = {
                     't': cur_time,
-                    'site': site_list[random.randint(0, 10)], #len(site_list) -1)],
+                    'site': site_list[random.randint(0, len(site_list) - 1)],
                     'cnv': random.random() * 2 - 1,
-                    'e': random.random() * 2 - 1,
-                    'cn': random.random() * 2 - 1,
-                    'ce': random.random() * 2 - 1,
-                    'n': random.random() * 2 - 1,
+                    'e': .3,
+                    'cn': 0.0001,
+                    'ce': 0.0001,
+                    'n': .3,
                     'cev': random.random() * 4 - 2,
                     'cne': random.random() * 2 - 1,
-                    'v': random.random() * 2 - 1,
-                    'cv': random.random() * 20 - 10
+                    'v': .3,
+                    'cv': 0.0001
                 }
                 self.send_measurement(new_data)
             time.sleep(random.random() * 0.2)
+
+#a = RabbitMQPoller(None)

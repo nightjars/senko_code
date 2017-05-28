@@ -6,6 +6,7 @@ from datetime import datetime as dt
 import time as Time
 import logging
 import math
+import ok
 
 class InverterThread(threading.Thread):
     def __init__(self, input_queue, output_queue):
@@ -22,10 +23,7 @@ class InverterThread(threading.Thread):
             kalman_data = DataStructures.get_grouped_inversion_queue_message(prev_message=kalman_data,
                                                                           inverter_begin=True)
 
-            if InverterConfiguration.inverter_config is None:
-                InverterConfiguration(sites, faults)
-
-            offset, add_matrix, sub_inputs, smooth_mat, mask = InverterConfiguration.get_config()
+            offset, add_matrix, sub_inputs, smooth_mat, mask = InverterConfiguration.get_config(sites, faults)
             offset = np.copy(offset)
             add_matrix = np.copy(add_matrix)
             sub_inputs = np.copy(sub_inputs)
@@ -153,23 +151,21 @@ class InverterThread(threading.Thread):
 
 
 class InverterConfiguration:
-    class __InverterConfiguration:
-        def __init__(self, config):
-            self.config = config
     inverter_config = None
-
-    def __init__(self, sites, faults):
-        new_config = self.config_generator(sites, faults)
-        if not InverterConfiguration.inverter_config:
-            InverterConfiguration.inverter_config = InverterConfiguration.__InverterConfiguration(new_config)
-        else:
-            InverterConfiguration.__InverterConfiguration.config = new_config
+    generator_lock = threading.Lock()
+    logger = logging.getLogger(__name__)
 
     @staticmethod
-    def get_config():
-        return InverterConfiguration.inverter_config.config
+    def get_config(sites, faults):
+        # to do: add logic to compare and update when sites/faults changes
+        with InverterConfiguration.generator_lock:
+            if InverterConfiguration.inverter_config is None:
+                InverterConfiguration.inverter_config = InverterConfiguration.config_generator(sites, faults)
+        return InverterConfiguration.inverter_config
 
-    def config_generator(self, sites, faults):
+    @staticmethod
+    def config_generator(sites, faults):
+        InverterConfiguration.logger.info("Starting inverter config processing.")
         offset_count = DataStructures.configuration['offsets_per_site']
         subfault_wid = int(faults['width'])
         subfault_len = int(faults['length'])
@@ -187,7 +183,7 @@ class InverterConfiguration:
 
         for site_key, site in sites.items():
             for fault_idx, fault in enumerate(faults['subfault_list']):
-                result = dc3d(fault[0], fault[1], fault[2], fault[3], fault[4], 0., fault[5], fault[6],
+                result = ok.dc3d(fault[0], fault[1], fault[2], fault[3], fault[4], 0., fault[5], fault[6],
                                  1, 0, site['lat'], site['lon'], 0)
                 sub_inputs[site['index']*3, fault_idx] = float(result[0])
                 sub_inputs[site['index']*3+1, fault_idx] = float(result[1])
@@ -220,8 +216,5 @@ class InverterConfiguration:
                 for x in range(len(faults['subfault_list'])):
                     smooth_mat[x, x] = -4
         mask[-len(faults['subfault_list']):,0] = 1
-
+        InverterConfiguration.logger.info("Finished inverter config processing.")
         return offset, add_matrix, sub_inputs, smooth_mat, mask
-
-def dc3d(a,b,c,d,e,f,g,h,i,j,k,l,m):
-    return (1,2,3)

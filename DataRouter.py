@@ -37,7 +37,6 @@ class DataRouter:
         self.threads.append(threading.Thread(target=self.incoming_data_router))
         self.threads.append(threading.Thread(target=self.kalman_initializer))
         self.threads.append(threading.Thread(target=self.time_grouper))
-        self.threads.append(threading.Thread(target=self.completed_inversion_reporter))
 
         for thread in self.threads:
             thread.start()
@@ -87,39 +86,31 @@ class DataRouter:
 
     def time_grouper(self):
         while not self.terminated:
-            Time.sleep(.5)
+            Time.sleep(.1)
             if self.last_sent_data_timestamp is not None:
                 oldest_good_data = self.last_sent_data_timestamp + 1
             else:
-                oldest_good_data = 0
+                oldest_good_data = calendar.timegm(Time.gmtime()) - DataStructures.configuration['delay_timespan']
 
             if self.last_sent_data_timestamp is None:
                 # If counter isn't initialized, just initialize to one second older than the oldest item
                 self.last_sent_data_timestamp = oldest_good_data - 1
 
-            # Destroy data that came too late to be processed
-
-            while True:
-                (time, segment_number, data) = self.time_grouping_queue.get()
-                if time >= oldest_good_data:
-                    # Put good data back in
-                    self.time_grouping_queue.put((time, segment_number, data))
-                    break
-
             # See if there is any data to send
             if self.newest_data_timestamp + DataStructures.configuration['group_timespan'] -            \
                         DataStructures.configuration['delay_timespan'] > self.last_sent_data_timestamp:
                 data_to_send = []
-
                 timestamps_to_accept = list(range(self.last_sent_data_timestamp + 1,
                                                   self.last_sent_data_timestamp + 1 +
                                                   DataStructures.configuration['group_timespan']))
-
                 while True:
                     (time, segment_number, data) = self.time_grouping_queue.get()
                     if time in timestamps_to_accept:
                         data_to_send.append(data)
                         self.last_sent_data_timestamp = max(time, self.last_sent_data_timestamp)
+                    elif time < oldest_good_data:
+                        self.logger.debug("{} receieved too late and discarded ({}, but working on {})".format(
+                            data, time, oldest_good_data))
                     else:
                         self.time_grouping_queue.put((time, segment_number, data))
                         break
@@ -128,14 +119,9 @@ class DataRouter:
                     data_to_send = DataStructures.get_grouped_inversion_queue_message(kalman_data=data_to_send,
                                                                                       inverter_wait_queue_dequeue=True)
                     self.inverter_queue.put((timestamps_to_accept, data_to_send, self.sites, self.faults))
+                    self.logger.debug("Sent timegroup {} to inverter queue.".format(
+                        timestamps_to_accept))
                 else:
+                    self.logger.debug("No data to sent to inverter for timegroup {}".format(
+                        oldest_good_data))
                     self.last_sent_data_timestamp += 1
-
-    def completed_inversion_reporter(self):
-        while not self.terminated:
-            completed_inversion = self.completed_inversion_queue.get()
-            self.completed_data_count += 1
-            self.logger.info("Just completed {}".format(completed_inversion['inverter_data']))
-            self.logger.info("Time beginning->end: {} seconds".format(
-                completed_inversion['timestamps']['invert_end'] -
-                completed_inversion['kalman_data'][0]['pre_kalman'][0]['timestamps']['data_received']))

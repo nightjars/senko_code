@@ -207,6 +207,8 @@ class KalmanThread(threading.Thread):
             'st': kalman['start_up'],
             'time': kalman['time'],
         }
+        self.logger.debug("Kalman filter generating data for site {}, time {}".format(
+            kalman['site']['name'], kalman['time']))
         kalman_out = DataStructures.get_post_kalman_queue_message(pre_kalman=data_set, kalman_data=kalman_data_output)
         self.output_queue.put((kalman_out['time_group'], kalman_out['sequence_number'], kalman_out))
 
