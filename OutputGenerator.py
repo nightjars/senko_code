@@ -1,5 +1,6 @@
 import threading
 import logging
+import json
 
 
 class OutputGeneratorThread(threading.Thread):
@@ -22,3 +23,4 @@ class OutputGeneratorThread(threading.Thread):
                     completed_inversion['timestamps']['invert_end'] -
                     completed_inversion['kalman_data'][0]['pre_kalman'][0]['timestamps']['data_received'],
                     len(completed_inversion['kalman_data'])))
+            print (json.dumps(completed_inversion['inverter_data']))
