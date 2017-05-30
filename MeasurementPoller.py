@@ -17,10 +17,6 @@ class MeasurementPoller:
                                                                gps_data_sequence_number=self.sequence_number))
         self.sequence_number += 1
 
-    def terminate(self):
-        self.terminated = True
-
-
 class RabbitMQPoller(MeasurementPoller):
 
     def __init__(self, output_queue):
@@ -63,22 +59,23 @@ class NonsensePoller(MeasurementPoller):
         site_list = list(self.config['sites'].keys())
         while not self.terminated:
             for x in range(100):
-                cur_time = calendar.timegm(time.gmtime()) -  \
-                    random.randint(0, 17)
-                new_data = {
-                    't': cur_time,
-                    'site': site_list[random.randint(0, len(site_list) - 1)],
-                    'cnv': random.random() * 2 - 1,
-                    'e': .3,
-                    'cn': 0.0001,
-                    'ce': 0.0001,
-                    'n': .3,
-                    'cev': random.random() * 4 - 2,
-                    'cne': random.random() * 2 - 1,
-                    'v': .3,
-                    'cv': 0.0001
-                }
-                self.send_measurement(new_data)
+                if not self.terminated:
+                    cur_time = calendar.timegm(time.gmtime()) -  \
+                        random.randint(0, 17)
+                    new_data = {
+                        't': cur_time,
+                        'site': site_list[random.randint(0, len(site_list) - 1)],
+                        'cnv': random.random() * 2 - 1,
+                        'e': .3,
+                        'cn': 0.0001,
+                        'ce': 0.0001,
+                        'n': .3,
+                        'cev': random.random() * 4 - 2,
+                        'cne': random.random() * 2 - 1,
+                        'v': .3,
+                        'cv': 0.0001
+                    }
+                    self.send_measurement(new_data)
             time.sleep(random.random() * 0.2)
 
 #a = RabbitMQPoller(None)

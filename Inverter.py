@@ -7,56 +7,62 @@ import time as Time
 import logging
 import math
 import ok
+import multiprocessing
+import queue
 
 class InverterThread(threading.Thread):
     def __init__(self, input_queue, output_queue):
         self.logger = logging.getLogger(__name__)
         self.input_queue = input_queue
         self.output_queue = output_queue
-        self.terminate = False
+        self.terminated = False
         threading.Thread.__init__(self)
 
     def run(self):
-        while not self.terminate:
-            (time, kalman_data, sites, faults) = self.input_queue.get()
-            self.logger.debug("Got a group for time {} with {} kalman sets in it".format(time, len(kalman_data['kalman_data'])))
-            kalman_data = DataStructures.get_grouped_inversion_queue_message(prev_message=kalman_data,
-                                                                          inverter_begin=True)
+        while not self.terminated:
+            try:
+                (time, kalman_data, sites, faults) = self.input_queue.get(timeout=1)
+                self.logger.debug("Got a group for time {} with {} kalman sets in it".format(time, len(kalman_data['kalman_data'])))
+                kalman_data = DataStructures.get_grouped_inversion_queue_message(prev_message=kalman_data,
+                                                                              inverter_begin=True)
 
-            offset, add_matrix, sub_inputs, smooth_mat, mask = InverterConfiguration.get_config(sites, faults)
-            offset = np.copy(offset)
-            add_matrix = np.copy(add_matrix)
-            sub_inputs = np.copy(sub_inputs)
-            mask = np.copy(mask)
+                offset, add_matrix, sub_inputs, smooth_mat, mask = InverterConfiguration.get_config(sites, faults)
+                offset = np.copy(offset)
+                add_matrix = np.copy(add_matrix)
+                sub_inputs = np.copy(sub_inputs)
+                mask = np.copy(mask)
 
-            site_correlate = []
+                site_correlate = []
 
-            for kalman_output in kalman_data['kalman_data']:
-                site_idx = sites[kalman_output['kalman_data']['site']]['index']
-                site_correlate.append((site_idx, sites[kalman_output['kalman_data']['site']]))
-                mask[site_idx * 3: site_idx * 3 + 3, 0] = 1
-                if kalman_output['kalman_data']['ta']:
-                    offset[0, site_idx] = kalman_output['kalman_data']['kn']
-                    offset[0, site_idx + 1] = kalman_output['kalman_data']['ke']
-                    offset[0, site_idx + 2] = kalman_output['kalman_data']['kv']
-                else:
-                    offset[0, site_idx * 3: site_idx * 3 + 3] = 0
+                for kalman_output in kalman_data['kalman_data']:
+                    site_idx = sites[kalman_output['kalman_data']['site']]['index']
+                    site_correlate.append((site_idx, sites[kalman_output['kalman_data']['site']]))
+                    mask[site_idx * 3: site_idx * 3 + 3, 0] = 1
+                    if kalman_output['kalman_data']['ta']:
+                        offset[0, site_idx] = kalman_output['kalman_data']['kn']
+                        offset[0, site_idx + 1] = kalman_output['kalman_data']['ke']
+                        offset[0, site_idx + 2] = kalman_output['kalman_data']['kv']
+                    else:
+                        offset[0, site_idx * 3: site_idx * 3 + 3] = 0
 
-            site_correlate.sort(key=lambda idx: idx[0])
+                site_correlate.sort(key=lambda idx: idx[0])
 
-            sub_inputs = np.vstack([sub_inputs, smooth_mat])
-            present_sub_inputs = np.take(sub_inputs, np.argwhere(mask > 0)[:, 0])
+                sub_inputs = np.vstack([sub_inputs, smooth_mat])
+                present_sub_inputs = np.take(sub_inputs, np.argwhere(mask > 0)[:, 0])
 
-            solution = optimize.nnls(sub_inputs, offset[0])[0]
+                solution = optimize.nnls(sub_inputs, offset[0])[0]
 
-            calc_offset = sub_inputs.dot(solution)
+                calc_offset = sub_inputs.dot(solution)
 
-            output = self.generate_output(solution, kalman_data['kalman_data'], site_correlate,
-                                          calc_offset, sites, faults)
+                output = self.generate_output(solution, kalman_data['kalman_data'], site_correlate,
+                                              calc_offset, sites, faults)
 
-            kalman_data = DataStructures.get_grouped_inversion_queue_message(prev_message=kalman_data,
-                                                                             inverter_data=output)
-            self.output_queue.put(kalman_data)
+                kalman_data = DataStructures.get_grouped_inversion_queue_message(prev_message=kalman_data,
+                                                                                 inverter_data=output)
+                self.output_queue.put(kalman_data)
+            except queue.Empty:
+                pass
+
 
     def generate_output(self, solution, kalman_data, correlate, calc_offset, sites, faults):
         fault_sol = []
@@ -91,14 +97,15 @@ class InverterThread(threading.Thread):
             pass
 
         if DataStructures.configuration['strike_slip']:
-            raise NotImplementedError
-        else:
             for x in range(int(faults['length'])):
                 temp = fault_sol[x]
                 temp[8] = float(temp[8])
                 for y in range(int(faults['width'])):
                     temp[8] += float(fault_sol[x+y*int(faults['length'])][8])
                 slip.append(temp)
+        else:
+            for fault in fault_sol:
+                slip.append(fault)
 
         for idx, site in enumerate(correlate):
             kalman_site = [x['kalman_data'] for x in kalman_data if x['kalman_data']['site'] is site[1]['name']][0]

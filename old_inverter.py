@@ -15,6 +15,7 @@ import threading as thr
 import logging
 import sys
 import traceback
+import threading
 
 
 class TVLiveSlip:
@@ -86,7 +87,6 @@ class TVLiveSlip:
 
         self.Correlate.append([sites[0][0], sites[0][1], sites[0][2]])
         curtime = dt.now()
-        print ("Running Site " + " " + str(curtime))
         for con in range(len(self.Faults)):
             com = []
             com.append(float(self.Faults[con][0]))  # Lat 0
@@ -226,13 +226,13 @@ class TVLiveSlip:
         if (t[0] == "Add"):  # here's where the distance filtering takes place. This could go in its own function too.
             logging.info("TVSlip adding " + str(t[1]))
             line = ""
-            a = np.ndarray([0.])
+            a = np.array([0.])
             temp = a.copy()
             temp.resize((3, len(self.Faults)))
 
             count = 0
 
-            with open('./sta_offset.d', 'r') as file:
+            with open('./sta_offset2.d', 'r') as file:
                 while True:
                     line2 = file.readline().split()
                     if not line2: break
@@ -241,7 +241,6 @@ class TVLiveSlip:
             # mag = np.sqrt( info[0]**2 + info[1]**2 + info[2]**2 )
             # if( ( mag > self.minOffset ) ):
             # count += 1.
-
 
             with self.lock:
                 self.SubInputs = np.vstack([self.SubInputs, temp])
@@ -261,31 +260,26 @@ class TVLiveSlip:
         num = 0
         lock = Lock()
 
-        while (True):
+        #while (True):
             # print "Slip Inverter Checking for data"
-            try:
-                station = self.INDataPipe.recv()
-                # print "Slip Inverter recieved data"
-                num += 1
-                # print "Starting Inverter " + str( len( self.inversionList ) ) + " with children = " + str( len( mp.active_children() ) ) + " and maxChildren = " + str( self.maxChildren )
-                while (len(
-                        mp.active_children()) >= self.maxChildren):  # so as long as mp.active_children >= self.maxChildren, it won't do anything.
-                    time.sleep(0.1)
-                # print "Current = " + str( len( mp.active_children() ) )
-                # print "Max = " + str( self.maxChildren )
-                with self.lock:
-                    p = mp.Process(target=self.SingleInverter, args=(
-                    station, self.alpha, self.stMask, self.SubInputs, self.smoothMat, self.Offset, self.OUTDataPipe,
-                    self.Faults, self.Correlate, lock, self.AddMatrix))
-                    p.start()
-                with self.invLock:
-                    now = dt.now()
-                    self.inversionList.append([p, now, station[0][0]])
-            except:
-                cause = sys.exc_info()[1]
-                for frame in traceback.extract_tb(sys.exc_info()[2]):
-                    fname, lineno, fn, text = frame
-                    logging.error("ERROR - {} {} {} {} {}".format(cause, fname, lineno, fn, text))
+        try:
+            station = self.INDataPipe.recv()
+            num += 1
+            # print "Starting Inverter " + str( len( self.inversionList ) ) + " with children = " + str( len( mp.active_children() ) ) + " and maxChildren = " + str( self.maxChildren )
+            while (len(
+                    mp.active_children()) >= self.maxChildren):  # so as long as mp.active_children >= self.maxChildren, it won't do anything.
+                time.sleep(0.1)
+            p = threading.Thread(target=self.SingleInverter, args=(
+            station, self.alpha, self.stMask, self.SubInputs, self.smoothMat, self.Offset, self.OUTDataPipe,
+            self.Faults, self.Correlate, lock, self.AddMatrix))
+            p.start()
+            now = dt.now()
+            self.inversionList.append([p, now, station[0][0]])
+        except:
+            cause = sys.exc_info()[1]
+            for frame in traceback.extract_tb(sys.exc_info()[2]):
+                fname, lineno, fn, text = frame
+                logging.error("ERROR - {} {} {} {} {}".format(cause, fname, lineno, fn, text))
 
     def SingleInverter(self, station, alpha, stMask, SubInputs, smoothMat, Offset, Pipe, Faults, Correlate, lock,
                        AddMatrix):
@@ -298,7 +292,7 @@ class TVLiveSlip:
         npcutoff = 0.
         npnoise = 0.
         inv = 0
-        a = np.ndarray([0.])
+        a = np.array([0.])
         Mask = a.copy()
         k = np.shape(Offset)[0] + len(Faults)
         Mask.resize(k, 1)
@@ -658,33 +652,4 @@ class TVLiveSlip:
         send['Moment'] = Magnitude
 
         send['Magnitude'] = Mw
-
-        try:
-            lock.acquire(timeout=1)
-            # with lock:
-            self.OUTDataPipe.send(send)
-            lock.release()
-            logging.info("TVLiveSlip finished inversion for " + str(station[0][0]) + " taking " + str(dt.now() - date))
-            print
-            "Inverter finished in " + str(dt.now() - date)
-        except:
-            cause = sys.exc_info()[1]
-            for frame in traceback.extract_tb(sys.exc_info()[2]):
-                fname, lineno, fn, text = frame
-                logging.error("ERROR - {} {} {} {} {}".format(cause, fname, lineno, fn, text))
-            logging.error("TVLiveSlip could not send inversion data for " + str(station[0][0]))
-            # lock.release()
-
-        '''try:
-        num = 0
-        with self.invLock:
-            while( num < len( self.inversionList ) ):
-                if( self.inversionList[ num ][2] == time ):break
-                num = num + 1
-            del self.inversionList[num]
-        except:
-        cause = sys.exc_info()[1]
-        for frame in traceback.extract_tb( sys.exc_info()[2] ):
-            fname, lineno, fn, text = frame
-            logging.error( "ERROR - {} {} {} {} {}".format( cause, fname, lineno, fn, text ) )'''
-        # print "Exiting Inversion"
+        self.OUTDataPipe.send(send)

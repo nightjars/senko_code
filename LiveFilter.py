@@ -29,6 +29,10 @@ class LiveFilter:
 
         self.data_source = MeasurementPoller.NonsensePoller(self.data_router.input_data_queue)
 
+    def stop(self):
+        self.data_router.terminated = True
+        self.worker_tracker.terminated = True
+        self.data_source.terminated = True
 
 def main():
     lv = LiveFilter()

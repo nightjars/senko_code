@@ -18,7 +18,7 @@ class WorkerTracker:
         self.validator_threads = []
         self.router = router
         self.output_generator = None
-        self.terminate = False
+        self.terminated = False
         self.tracker_thread = threading.Thread(target=self.run, args=())
         self.tracker_thread.start()
         self.config = config
@@ -32,7 +32,7 @@ class WorkerTracker:
         self.output_generator.start()
 
         counter = 0
-        while not self.terminate:
+        while not self.terminated:
             counter += 1
             if counter % 100 == 0:
                 self.logger.info("Work status:")
@@ -78,3 +78,29 @@ class WorkerTracker:
                     self.inverter_threads[-1].start()
 
             time.sleep(.2)
+
+        self.logger.info("Beginning worker thread shutdown.")
+        for thread in self.inverter_threads:
+            thread.terminated = True
+        for thread in self.inverter_threads:
+            thread.join()
+        self.logger.info("Inverter threads shutdown")
+        for thread in self.kalman_threads:
+            thread.terminated = True
+        for thread in self.kalman_threads:
+            thread.join()
+        self.logger.info("Kalman threads shutdown")
+        for thread in self.reporter_threads:
+            thread.terminated = True
+        for thread in self.reporter_threads:
+            thread.join()
+        self.logger.info("Reporter threads shutdown")
+        for thread in self.validator_threads:
+            thread.terminated = True
+        for thread in self.validator_threads:
+            thread.join()
+        self.logger.info("Validator threads shutdown")
+        self.output_generator.terminated = True
+        self.output_generator.join()
+        self.logger.info("Output generator thread shutdown")
+        self.logger.info("All worker treads shutdown")

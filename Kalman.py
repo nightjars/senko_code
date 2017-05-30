@@ -5,6 +5,8 @@ import random
 import calendar
 import numpy as np
 import logging
+import multiprocessing
+import queue
 
 
 class KalmanThread(threading.Thread):
@@ -12,27 +14,28 @@ class KalmanThread(threading.Thread):
         self.logger = logging.getLogger(__name__)
         self.input_queue = input_queue
         self.output_queue = output_queue
-        self.terminate = False
+        self.terminated = False
         threading.Thread.__init__(self)
 
     def run(self):
-        while not self.terminate:
-            kalman = self.input_queue.get()
-            if kalman is not None:
+        while not self.terminated:
+            try:
+                kalman = self.input_queue.get(timeout=1)
                 if kalman['lock'].acquire(False):
                     self.logger.debug("{} beginning processing {}".format(self, kalman['site']))
-                    while not kalman['measurement_queue'].empty():
-                        (_, _, measurement) = kalman['measurement_queue'].get()
-                        kalman['data_set'].append(DataStructures.get_gps_data_queue_message(measurement,
-                                                    kalman_filter_step=True))
-                        self.process_measurement(kalman)
+                    while not self.terminated and not kalman['measurement_queue'].empty():
+                        try:
+                            (_, _, measurement) = kalman['measurement_queue'].get(timeout=1)
+                            kalman['data_set'].append(DataStructures.get_gps_data_queue_message(measurement,
+                                                        kalman_filter_step=True))
+                            self.process_measurement(kalman)
+                        except queue.Empty:
+                            pass
                     kalman['lock'].release()
                     self.logger.debug("{} finished processing {}".format(self, kalman['site']))
-                else:
-                    pass
 
-    def terminate(self):
-        self.terminate = True
+            except queue.Empty:
+                pass
 
     def process_measurement(self, kalman):
         if kalman['last_calculation'] is None or \
@@ -67,10 +70,6 @@ class KalmanThread(threading.Thread):
                             self.update_matrix(kalman)
 
                 kalman['last_calculation'] = kalman['data_set'][-1]['gps_data']['t']
-
-    def pass_update_stat(self, kalman):
-        kalman['i_state'] = kalman['state'] * 1.    # * 1. - what's the purpose?
-        kalman['i_state_2'] = kalman['state_2'] * 1.
 
     def update_matrix(self, kalman):
         if kalman['last_calculation'] is not None:

@@ -44,45 +44,51 @@ class DataRouter:
 
     def incoming_data_router(self):
         while not self.terminated:
-            new_data = self.input_data_queue.get()
-            self.data_num += 1
-            if new_data['gps_data']['site'] in self.kalman_map:
-                # If there's in entry in the kalman map, the kalman filter is in one of two states:
-                # activity processing, in which case add the work to the filter's queue.  If not actively
-                # processing, either re-start the kalman filter or create a new one, based on if the
-                # data has passed its defined expiration date
+            try:
+                new_data = self.input_data_queue.get(timeout=1)
+                self.data_num += 1
+                if new_data['gps_data']['site'] in self.kalman_map:
+                    # If there's in entry in the kalman map, the kalman filter is in one of two states:
+                    # activity processing, in which case add the work to the filter's queue.  If not actively
+                    # processing, either re-start the kalman filter or create a new one, based on if the
+                    # data has passed its defined expiration date
 
-                kalman = self.kalman_map[new_data['gps_data']['site']]
-                measure_time = new_data['gps_data_timestamp']
-                kalman['measurement_queue'].put((measure_time, self.data_num,
-                                                 DataStructures.get_gps_data_queue_message(new_data,
-                                                 kalman_verify_step=True,kalman_filter_step=True)))
+                    kalman = self.kalman_map[new_data['gps_data']['site']]
+                    measure_time = new_data['gps_data_timestamp']
+                    kalman['measurement_queue'].put((measure_time, self.data_num,
+                                                     DataStructures.get_gps_data_queue_message(new_data,
+                                                     kalman_verify_step=True,kalman_filter_step=True)))
 
-                # lock will be set if a thread is currently working on this data
-                if kalman['lock'].acquire(False):
-                    # Lock acquired, nothing is processing this data
-                    if kalman['last_calculation'] is not None and                                      \
-                                    calendar.timegm(Time.gmtime()) - kalman['last_calculation'] >      \
-                                    DataStructures.configuration['kalman_stale']:
-                        self.kalman_map[new_data['gps_data']['site']] = \
-                            DataStructures.get_empty_kalman_state(self.sites, self.faults)
-                        self.input_data_queue.put(new_data)
-                        kalman['lock'].release()
-                    else:
-                        self.kalman_start_queue.put(kalman)
-                        kalman['lock'].release()
-            else:
-                self.data_validator_queue.put(new_data)
-            self.newest_data_timestamp = max(new_data['gps_data_timestamp'], self.newest_data_timestamp)
+                    # lock will be set if a thread is currently working on this data
+                    if kalman['lock'].acquire(False):
+                        # Lock acquired, nothing is processing this data
+                        if kalman['last_calculation'] is not None and                                      \
+                                        calendar.timegm(Time.gmtime()) - kalman['last_calculation'] >      \
+                                        DataStructures.configuration['kalman_stale']:
+                            self.kalman_map[new_data['gps_data']['site']] = \
+                                DataStructures.get_empty_kalman_state(self.sites, self.faults)
+                            self.input_data_queue.put(new_data)
+                            kalman['lock'].release()
+                        else:
+                            self.kalman_start_queue.put(kalman)
+                            kalman['lock'].release()
+                else:
+                    self.data_validator_queue.put(new_data)
+                self.newest_data_timestamp = max(new_data['gps_data_timestamp'], self.newest_data_timestamp)
+            except queue.Empty:
+                pass
 
     def kalman_initializer(self):
         while not self.terminated:
-            new_data = self.kalman_initialize_queue.get()
-            with self.kalman_lock:
-                if not new_data['gps_data']['site'] in self.kalman_map:
-                    self.kalman_map[new_data['gps_data']['site']] = \
-                        DataStructures.get_empty_kalman_state(self.sites, self.faults)
-            self.input_data_queue.put(new_data)
+            try:
+                new_data = self.kalman_initialize_queue.get(timeout=1)
+                with self.kalman_lock:
+                    if not new_data['gps_data']['site'] in self.kalman_map:
+                        self.kalman_map[new_data['gps_data']['site']] = \
+                            DataStructures.get_empty_kalman_state(self.sites, self.faults)
+                self.input_data_queue.put(new_data)
+            except queue.Empty:
+                pass
 
     def time_grouper(self):
         while not self.terminated:
@@ -103,17 +109,20 @@ class DataRouter:
                 timestamps_to_accept = list(range(self.last_sent_data_timestamp + 1,
                                                   self.last_sent_data_timestamp + 1 +
                                                   DataStructures.configuration['group_timespan']))
-                while True:
-                    (time, segment_number, data) = self.time_grouping_queue.get()
-                    if time in timestamps_to_accept:
-                        data_to_send.append(data)
-                        self.last_sent_data_timestamp = max(time, self.last_sent_data_timestamp)
-                    elif time < oldest_good_data:
-                        self.logger.debug("{} receieved too late and discarded ({}, but working on {})".format(
-                            data, time, oldest_good_data))
-                    else:
-                        self.time_grouping_queue.put((time, segment_number, data))
-                        break
+                try:
+                    while True:
+                        (time, segment_number, data) = self.time_grouping_queue.get(timeout=1)
+                        if time in timestamps_to_accept:
+                            data_to_send.append(data)
+                            self.last_sent_data_timestamp = max(time, self.last_sent_data_timestamp)
+                        elif time < oldest_good_data:
+                            self.logger.debug("{} receieved too late and discarded ({}, but working on {})".format(
+                                data, time, oldest_good_data))
+                        else:
+                            self.time_grouping_queue.put((time, segment_number, data))
+                            break
+                except queue.Empty:
+                    pass
 
                 if len(data_to_send):
                     data_to_send = DataStructures.get_grouped_inversion_queue_message(kalman_data=data_to_send,
