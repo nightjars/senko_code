@@ -6,6 +6,7 @@ import threading
 import DataStructures
 import LiveFilter
 import time
+import logging
 
 class InverterTests(unittest.TestCase):
     old_result = None
@@ -13,6 +14,7 @@ class InverterTests(unittest.TestCase):
     test_run_lock = mp.Lock()
 
     def setUp(self):
+        self.logger = logging.getLogger(__name__)
         with InverterTests.test_run_lock:
             if InverterTests.old_result is None:
                 lf = LiveFilter.LiveFilter()
@@ -38,17 +40,24 @@ class InverterTests(unittest.TestCase):
                 new_i.start()
                 old_thread.start()
 
+                start = time.time()
                 inverter_in_queue.put(full_inverter_msg)
+                InverterTests.new_result = inverter_out_queue.get()['inverter_data']
+                new_elapsed_time = time.time() - start
 
+                start = time.time()
                 station_data = []
                 for data in old_inverter_msg['kalman_data']:
                     station_data.append([old_inverter_msg['time_group'], data['kalman_data']])
                     old_i.add(station_data[-1][1]['site'])
-                ipipe[1].send(station_data)
 
+                ipipe[1].send(station_data)
                 InverterTests.old_result = opipe[1].recv()
-                InverterTests.new_result = inverter_out_queue.get()['inverter_data']
+                old_elapsed_time = time.time() - start
+
                 new_i.terminated = True
+                self.logger.info("New inverter time to execute: {} seconds".format(new_elapsed_time))
+                self.logger.info("Old inverter time to execute: {} seconds".format(old_elapsed_time))
 
     def test_compare_slip_output_lengths(self):
         old_slip = InverterTests.old_result['slip']

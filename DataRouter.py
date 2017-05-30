@@ -67,11 +67,11 @@ class DataRouter:
                                         DataStructures.configuration['kalman_stale']:
                             self.kalman_map[new_data['gps_data']['site']] = \
                                 DataStructures.get_empty_kalman_state(self.sites, self.faults)
+                            kalman['lock'].release()
                             self.input_data_queue.put(new_data)
-                            kalman['lock'].release()
                         else:
-                            self.kalman_start_queue.put(kalman)
                             kalman['lock'].release()
+                            self.kalman_start_queue.put(kalman)
                 else:
                     self.data_validator_queue.put(new_data)
                 self.newest_data_timestamp = max(new_data['gps_data_timestamp'], self.newest_data_timestamp)
