@@ -20,14 +20,12 @@ class LiveFilter:
         self.config = DataLoader.load_data_from_text_files(sites_data_file=DataStructures.configuration['sites_file'],
                                                          faults_data_file=DataStructures.configuration['faults_file'])
         self.worker_tracker = None
-        self.data_router = None
-        self.data_source = None
+        self.data_router = DataRouter.DataRouter(self.config['sites'], self.config['faults'])
+        self.data_source = MeasurementPoller.NonsensePoller(self.data_router.input_data_queue)
 
     def start(self):
-        self.data_router = DataRouter.DataRouter(self.config['sites'], self.config['faults'])
         self.worker_tracker = WorkerTracker.WorkerTracker(self.data_router, self.config)
-
-        self.data_source = MeasurementPoller.NonsensePoller(self.data_router.input_data_queue)
+        self.data_source.start()
 
     def stop(self):
         self.data_router.terminated = True

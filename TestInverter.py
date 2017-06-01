@@ -17,12 +17,10 @@ class InverterTests(unittest.TestCase):
         self.logger = logging.getLogger(__name__)
         with InverterTests.test_run_lock:
             if InverterTests.old_result is None:
-                lf = LiveFilter.LiveFilter()
-                lf.start()
                 data_source = mp.Queue()
-                while lf.data_router is None:
-                    time.sleep(.5)
+                lf = LiveFilter.LiveFilter()
                 lf.data_router.inverter_queue = data_source
+                lf.start()
 
                 full_inverter_msg = data_source.get()
                 old_inverter_msg = full_inverter_msg[1]

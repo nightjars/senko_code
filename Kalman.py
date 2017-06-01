@@ -15,9 +15,14 @@ class KalmanThread(threading.Thread):
         self.input_queue = input_queue
         self.output_queue = output_queue
         self.terminated = False
+        self.force_no_delta_t = False
+        ''' force_no_delta_t for unit tests to usefully compare output with other Kalman filter
+            delta_t does not calculate time differential in old code, so this
+            is needed for comparison consistency'''
         threading.Thread.__init__(self)
 
     def run(self):
+        np.set_printoptions(precision=30)
         while not self.terminated:
             try:
                 kalman = self.input_queue.get(timeout=1)
@@ -57,7 +62,7 @@ class KalmanThread(threading.Thread):
                             np.abs(res[2, 0]) < kalman['max_offset']:
                     if kalman['last_calculation'] is None:
                         kalman['site'] = kalman['sites'][kalman['data_set'][-1]['gps_data']['site']]
-                        kalman['state_2'] = measure_matrix * 1.0   # what's with the * 1.0?
+                        kalman['state_2'] = measure_matrix * 1.0
                     else:
                         kalman['measurement_matrix'] = measure_matrix
                         r[0, 0] = max(r[0, 0], kalman['def_r'])
@@ -68,19 +73,21 @@ class KalmanThread(threading.Thread):
                             self.pass_update_state(kalman)
                         else:
                             self.update_matrix(kalman)
-
                 kalman['last_calculation'] = kalman['data_set'][-1]['gps_data']['t']
 
     def update_matrix(self, kalman):
         if kalman['last_calculation'] is not None:
-            kalman['delta_t'] = kalman['data_set'][-1]['gps_data_timestamp'] - kalman['last_calculation']
+            if self.force_no_delta_t:
+                kalman['delta_t'] = 0  # make test pass
+            else:
+                kalman['delta_t'] = kalman['data_set'][-1]['gps_data_timestamp'] - kalman['last_calculation']
             kalman['last_calculation'] = kalman['time']
             kalman['q'] = np.matrix([[kalman['delta_t'], 0., 0.],
                                      [0., kalman['delta_t'], 0.],
                                      [0., 0., kalman['delta_t']]])
         kalman['m'] = kalman['phi'] * kalman['p'] * kalman['phi'].T + kalman['q']
-        kalman['k'] = kalman['m'] * kalman['h'].T *                                     \
-                      (kalman['h'] * kalman['m'] * kalman['h'].T + kalman['r']).I
+        interm = (kalman['h'] * kalman['m'] * kalman['h'].T + kalman['r']).I
+        kalman['k'] = kalman['m'] * kalman['h'].T * interm
         kalman['p'] = (kalman['iden'] - kalman['k'] * kalman['h']) * kalman['m']
         self.calc_res(kalman)
 
@@ -199,9 +206,9 @@ class KalmanThread(threading.Thread):
             'ke': kalman['state'][1, 0],
             'kv': kalman['state'][2, 0],
             'cn': kalman['r'][0, 0],
-            'ce': kalman['r'][1, 0],
-            'cv': kalman['r'][2, 0],
-            'he': kalman['site']['height'],
+            'ce': kalman['r'][1, 1],
+            'cv': kalman['r'][2, 2],
+            'he': 0,  #kalman['site']['height'],  Old Kalman filter uses 0, should this be so?
             'ta': kalman['tag'],
             'st': kalman['start_up'],
             'time': kalman['time'],
@@ -233,3 +240,16 @@ class KalmanThread(threading.Thread):
 
     def eq_num_test(self, kalman):
         return max(kalman['eq_count'][0:3, 0])
+
+    def output_state(self, kalman, output, message):
+        disp_list = ['h', 'phi', 'state', 'state_2', 'offset', 'max_offset', 'iden', 'k', 'm', 'p',
+                     'measurement_matrix', 'r', 'def_r', 'synth_n', 'synth_e', 'synth_v',
+                     'i_state', 'i_state_2', 'q', 'res', 'override_flag', 'sm_count',
+                     'smoothing', 'start_up', 'eq_count', 'eq_flag', 'eq_threshold', 'tag',
+                     's_measure', 'init_p', 'reset_p', 'p_count', 'time', 'write', 'wait']
+        output("Kalman state dump: {}".format(message))
+        for state in disp_list:
+            if state in ['smoothing', 'sm_count']:
+                output("{} {}".format(state, float(kalman[state])))
+            else:
+                output("{} {}".format(state, kalman[state]))

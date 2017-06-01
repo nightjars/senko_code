@@ -109,8 +109,9 @@ class DataRouter:
                 timestamps_to_accept = list(range(self.last_sent_data_timestamp + 1,
                                                   self.last_sent_data_timestamp + 1 +
                                                   DataStructures.configuration['group_timespan']))
-                try:
-                    while True:
+
+                while not self.terminated:
+                    try:
                         (time, segment_number, data) = self.time_grouping_queue.get(timeout=1)
                         if time in timestamps_to_accept:
                             data_to_send.append(data)
@@ -121,8 +122,8 @@ class DataRouter:
                         else:
                             self.time_grouping_queue.put((time, segment_number, data))
                             break
-                except queue.Empty:
-                    pass
+                    except queue.Empty:
+                        pass
 
                 if len(data_to_send):
                     data_to_send = DataStructures.get_grouped_inversion_queue_message(kalman_data=data_to_send,

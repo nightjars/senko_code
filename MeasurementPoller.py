@@ -17,6 +17,12 @@ class MeasurementPoller:
                                                                gps_data_sequence_number=self.sequence_number))
         self.sequence_number += 1
 
+    def start(self):
+        pass
+
+    def stop(self):
+        self.terminated = True
+
 class RabbitMQPoller(MeasurementPoller):
 
     def __init__(self, output_queue):
@@ -53,27 +59,29 @@ class NonsensePoller(MeasurementPoller):
         super(NonsensePoller, self).__init__(output_queue)
         self.config = DataLoader.load_data_from_text_files(sites_data_file=DataStructures.configuration['sites_file'],
                                                            faults_data_file=DataStructures.configuration['faults_file'])
+
+    def start(self):
         threading.Thread(target=self.nonsense_generator).start()
+        MeasurementPoller.start(self)
 
     def nonsense_generator(self):
         site_list = list(self.config['sites'].keys())
         while not self.terminated:
             for x in range(100):
                 if not self.terminated:
-                    cur_time = calendar.timegm(time.gmtime()) -  \
-                        random.randint(0, 17)
+                    cur_time = calendar.timegm(time.gmtime())
                     new_data = {
                         't': cur_time,
                         'site': site_list[random.randint(0, len(site_list) - 1)],
                         'cnv': random.random() * 2 - 1,
-                        'e': .3,
-                        'cn': 0.0001,
-                        'ce': 0.0001,
-                        'n': .3,
+                        'e': .3 + random.random() * .1 - .05,
+                        'cn': 0.0001 + random.random() * .002 - .001,
+                        'ce': 0.0001 + random.random() * .002 - .001,
+                        'n': .3 + random.random() * .1 - .05,
                         'cev': random.random() * 4 - 2,
                         'cne': random.random() * 2 - 1,
-                        'v': .3,
-                        'cv': 0.0001
+                        'v': .3 + random.random() * .1 - .05,
+                        'cv': 0.0001 + random.random() * .002 - .001
                     }
                     self.send_measurement(new_data)
             time.sleep(random.random() * 0.2)
