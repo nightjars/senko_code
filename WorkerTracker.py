@@ -24,7 +24,7 @@ class WorkerTracker:
         self.config = config
 
     def run(self):
-        self.router_threads.append(threading.Thread(target=self.router.router_loop, args=()))
+        self.router_threads.append(threading.Thread(target=self.router.router_start, args=()))
         self.router_threads[-1].start()
 
         self.output_generator = OutputGenerator.OutputGeneratorThread(

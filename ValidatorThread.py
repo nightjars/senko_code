@@ -6,6 +6,7 @@ import logging
 import multiprocessing
 import queue
 
+
 class ValidatorThread(threading.Thread):
 
     def __init__(self, input_queue, output_queue, data):
@@ -16,6 +17,10 @@ class ValidatorThread(threading.Thread):
         self.terminated = False
         threading.Thread.__init__(self)
         super(ValidatorThread, self).__init__()
+
+    def stop(self):
+        self.terminated = True
+
 
 class PrecalculatedOffsetValidator(ValidatorThread):
 
@@ -32,3 +37,7 @@ class PrecalculatedOffsetValidator(ValidatorThread):
                         self.logger.info("Ignoring {} {}".format(new_data['gps_data']['site'], calcdata[new_data['gps_data']['site']]['minimum_offset']))
             except queue.Empty:
                 pass
+
+
+def default_validator(input_queue, output_queue, data):
+    return PrecalculatedOffsetValidator(input_queue, output_queue, data)
