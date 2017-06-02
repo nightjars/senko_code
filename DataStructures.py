@@ -251,8 +251,8 @@ def get_grouped_inversion_queue_message(prev_message=None, kalman_data=None, inv
     if prev_message is None:
         prev_message = copy.deepcopy(grouped_inversion_queue_message_definition)
     if kalman_data is not None:
-        # Using index 0 since all data sets will be same time group (if by 1 - will fix later)
-        time_group = kalman_data[0]['time_group']
+        # check time group for any arbitrary member of data set, they should all be the same
+        time_group = next(iter(kalman_data.values()))['time_group']
         kalman_data = kalman_data
     else:
         time_group = prev_message['time_group']

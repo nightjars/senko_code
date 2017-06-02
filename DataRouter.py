@@ -74,7 +74,7 @@ class DataRouter:
                         if kalman['lock'].acquire(False):
                             # Lock acquired, nothing is processing this data, put into start queue
                             kalman['lock'].release()
-                            self.kalman_start_queue.put(new_data)
+                            self.kalman_start_queue.put(kalman)
                 else:
                     self.data_validator_queue.put(new_data)
                 self.newest_data_timestamp = max(new_data['gps_data_timestamp'], self.newest_data_timestamp)
@@ -108,7 +108,7 @@ class DataRouter:
             # See if there is any data to send
             if self.newest_data_timestamp + DataStructures.configuration['group_timespan'] - 1 -       \
                         DataStructures.configuration['delay_timespan'] > self.last_sent_data_timestamp:
-                data_to_send = []
+                data_to_send = {}
                 timestamps_to_accept = list(range(self.last_sent_data_timestamp + 1,
                                                   self.last_sent_data_timestamp + 1 +
                                                   DataStructures.configuration['group_timespan']))
@@ -116,7 +116,7 @@ class DataRouter:
                     try:
                         (time, segment_number, data) = self.time_grouping_queue.get(timeout=.5)
                         if time in timestamps_to_accept:
-                            data_to_send.append(data)
+                            data_to_send[data['kalman_data']['site']] = data
                             self.last_sent_data_timestamp = max(time, self.last_sent_data_timestamp)
                         elif time < oldest_good_data:
                             self.logger.debug("{} receieved too late and discarded ({}, but working on {})".format(

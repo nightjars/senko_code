@@ -34,8 +34,8 @@ class InverterThread(threading.Thread):
 
                 site_correlate = []
 
-                for kalman_output in kalman_data['kalman_data']:
-                    site_idx = sites[kalman_output['kalman_data']['site']]['index']
+                for site, kalman_output in kalman_data['kalman_data'].items():
+                    site_idx = sites[site]['index']
                     site_correlate.append((site_idx, sites[kalman_output['kalman_data']['site']]))
                     mask[site_idx * 3: site_idx * 3 + 3, 0] = 1
                     if kalman_output['kalman_data']['ta']:
@@ -55,7 +55,7 @@ class InverterThread(threading.Thread):
                 calc_offset = sub_inputs.dot(solution)
 
                 output = self.generate_output(solution, kalman_data['kalman_data'], site_correlate,
-                                              calc_offset, sites, faults)
+                                              calc_offset, sites, faults, time)
 
                 kalman_data = DataStructures.get_grouped_inversion_queue_message(prev_message=kalman_data,
                                                                                  inverter_data=output)
@@ -64,12 +64,11 @@ class InverterThread(threading.Thread):
                 pass
 
 
-    def generate_output(self, solution, kalman_data, correlate, calc_offset, sites, faults):
+    def generate_output(self, solution, kalman_data, correlate, calc_offset, sites, faults, time):
         fault_sol = []
         magnitude = 0.0
         final_calc = []
         site_data = []
-        time = kalman_data[0]['kalman_data']['time']
         slip = []
         estimates = []
 
@@ -108,7 +107,8 @@ class InverterThread(threading.Thread):
                 slip.append(fault)
 
         for idx, site in enumerate(correlate):
-            kalman_site = [x['kalman_data'] for x in kalman_data if x['kalman_data']['site'] is site[1]['name']][0]
+            _, site_info = site         # split up tuple of site_idx,site
+            kalman_site = kalman_data[site_info['name']]['kalman_data']
             final_calc.append([
                 kalman_site['site'],
                 kalman_site['la'],
@@ -143,9 +143,9 @@ class InverterThread(threading.Thread):
         magnitude_str = "{:.2E}".format(magnitude)
 
         output = {
-            'time': time,
+            'time': time[-1],
             'data': site_data,
-            'label': "label and model to appear" + dt.utcfromtimestamp(float(time)).strftime("%Y-%m-%d %H:%M:%S %Z"),
+            'label': "label and model to appear" + dt.utcfromtimestamp(float(time[-1])).strftime("%Y-%m-%d %H:%M:%S %Z"),
             'slip': slip,
             'estimates': estimates,
             'Moment': magnitude_str,
@@ -153,8 +153,8 @@ class InverterThread(threading.Thread):
         }
         return output
 
-    def terminate(self):
-        self.terminate = True
+    def stop(self):
+        self.terminated = True
 
 
 class InverterConfiguration:

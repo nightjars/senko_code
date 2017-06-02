@@ -45,7 +45,7 @@ class InverterTests(unittest.TestCase):
 
                 start = time.time()
                 station_data = []
-                for data in old_inverter_msg['kalman_data']:
+                for _, data in old_inverter_msg['kalman_data'].items():
                     station_data.append([old_inverter_msg['time_group'], data['kalman_data']])
                     old_i.add(station_data[-1][1]['site'])
 
