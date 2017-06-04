@@ -40,15 +40,14 @@ class InverterTests(unittest.TestCase):
 
                 start = time.time()
                 inverter_in_queue.put(full_inverter_msg)
-                InverterTests.new_result = inverter_out_queue.get()['inverter_data']
+                InverterTests.new_result = inverter_out_queue.get()['inverter_output_data']
                 new_elapsed_time = time.time() - start
 
                 start = time.time()
                 station_data = []
-                for _, data in old_inverter_msg['kalman_data'].items():
-                    station_data.append([old_inverter_msg['time_group'], data['kalman_data']])
+                for _, data in old_inverter_msg['kalman_output_data'].items():
+                    station_data.append([data['time'], data])
                     old_i.add(station_data[-1][1]['site'])
-
                 ipipe[1].send(station_data)
                 InverterTests.old_result = opipe[1].recv()
                 old_elapsed_time = time.time() - start

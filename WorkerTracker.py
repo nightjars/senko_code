@@ -31,6 +31,12 @@ class WorkerTracker:
             self.router.completed_inversion_queue)
         self.output_generator.start()
 
+        # find a better place for this
+        # this will do the math needed for setting up sites for the inverter
+        ci = threading.Thread(target=Inverter.InverterConfiguration.get_config,
+                              kwargs={'conf': self.router.inv_conf})
+        ci.start()
+
         counter = 0
         while not self.terminated:
             counter += 1

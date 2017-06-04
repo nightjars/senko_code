@@ -65,7 +65,7 @@ class TestKalmanFilter(unittest.TestCase):
                 for message in data_messages:
                     ipipe[1].send(message['gps_data'])
 
-                time.sleep(15)
+                time.sleep(5)
 
                 while opipe[1].poll():
                         old_data_back.append(opipe[1].recv())
@@ -80,10 +80,11 @@ class TestKalmanFilter(unittest.TestCase):
                 if not new_kal_state['lock'].locked():
                     new_kal_in.put(new_kal_state)
 
-                time.sleep(15)
+                time.sleep(5)
                 while not new_kal_out.empty():
                     _, _, data = new_kal_out.get(timeout=1)
-                    new_data_back.append(data['kalman_data'])
+                    for _, val in data['kalman_output_data'].items():
+                        new_data_back.append(val)
 
 
                 new_kal.terminated = True

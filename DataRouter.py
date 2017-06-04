@@ -11,6 +11,8 @@ class DataRouter:
     # deal with the lifecycle of data going through the system
     def __init__(self, sites, faults):
         self.logger = logging.getLogger(__name__)
+        self.conf = DataStructures.configuration
+        self.inv_conf = DataStructures.inverter_configuration
         self.input_data_queue = queue.Queue()
         self.data_validator_queue = queue.Queue()
         self.time_grouping_queue = queue.PriorityQueue()
@@ -37,6 +39,8 @@ class DataRouter:
 
     def router_start(self):
         self.logger.info("Data router starting.")
+        self.inv_conf['sites'] = self.sites
+        self.inv_conf['faults'] = self.faults
         self.threads.append(threading.Thread(target=self.incoming_data_router))
         self.threads.append(threading.Thread(target=self.kalman_initializer))
         self.threads.append(threading.Thread(target=self.time_grouper))
@@ -67,7 +71,7 @@ class DataRouter:
 
 
                         kalman['measurement_queue'].put((measure_time, self.data_num,
-                                                         DataStructures.get_gps_data_queue_message(new_data,
+                                                         DataStructures.get_gps_measurement_queue_message(new_data,
                                                          kalman_verify_step=True,kalman_filter_step=True)))
 
                         # lock will be set if a thread is currently working on this data
@@ -99,16 +103,17 @@ class DataRouter:
             if self.last_sent_data_timestamp is not None:
                 oldest_good_data = self.last_sent_data_timestamp + 1
             else:
-                oldest_good_data = calendar.timegm(Time.gmtime()) - DataStructures.configuration['delay_timespan']
+                oldest_good_data = calendar.timegm(Time.gmtime()) - self.conf['delay_timespan']
 
             if self.last_sent_data_timestamp is None:
                 # If counter isn't initialized, just initialize to one second older than the oldest item
                 self.last_sent_data_timestamp = oldest_good_data - 1
 
             # See if there is any data to send
-            if self.newest_data_timestamp + DataStructures.configuration['group_timespan'] - 1 -       \
-                        DataStructures.configuration['delay_timespan'] > self.last_sent_data_timestamp:
-                data_to_send = {}
+            if self.newest_data_timestamp + self.conf['group_timespan'] - 1 -       \
+                        self.conf['delay_timespan'] > self.last_sent_data_timestamp:
+                kalman_data_to_send = {}
+                measurement_data_to_send = {}
                 timestamps_to_accept = list(range(self.last_sent_data_timestamp + 1,
                                                   self.last_sent_data_timestamp + 1 +
                                                   DataStructures.configuration['group_timespan']))
@@ -116,7 +121,9 @@ class DataRouter:
                     try:
                         (time, segment_number, data) = self.time_grouping_queue.get(timeout=.5)
                         if time in timestamps_to_accept:
-                            data_to_send[data['kalman_data']['site']] = data
+                            site = next(iter(data['kalman_output_data']))
+                            kalman_data_to_send[site] = data['kalman_output_data'][site]
+                            measurement_data_to_send[site] = data['gps_measurement_data'][site]
                             self.last_sent_data_timestamp = max(time, self.last_sent_data_timestamp)
                         elif time < oldest_good_data:
                             self.logger.debug("{} receieved too late and discarded ({}, but working on {})".format(
@@ -127,10 +134,11 @@ class DataRouter:
                     except queue.Empty:
                         break
 
-                if len(data_to_send):
-                    data_to_send = DataStructures.get_grouped_inversion_queue_message(kalman_data=data_to_send,
+                if len(kalman_data_to_send):
+                    data_to_send = DataStructures.get_grouped_inversion_queue_message(gps_measurement_data=measurement_data_to_send,
+                                                                                      kalman_output_data=kalman_data_to_send,
                                                                                       inverter_wait_queue_dequeue=True)
-                    self.inverter_queue.put((timestamps_to_accept, data_to_send, self.sites, self.faults))
+                    self.inverter_queue.put((timestamps_to_accept, data_to_send, self.inv_conf))
                     self.logger.debug("Sent timegroup {} to inverter queue.".format(
                         timestamps_to_accept))
                 else:

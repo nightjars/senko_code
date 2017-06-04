@@ -16,7 +16,7 @@ configuration = {
                   'password': 'ro',
                   'virtual_host': '/CWU-ppp'
                   },
-    'kalman_stale': 300,  # (seconds) Time before kelman states are wiped
+    'kalman_stale': 300,  # (seconds) Time before kalman states are wiped
     'group_timespan': 1,  # (seconds) Group batches of data in timespan
     'delay_timespan': 15,  # (seconds) Time to wait for laggard data
     'idle_sleep_time': 0.1,  # (seconds) Time to sleep to avoid busy wait loops
@@ -32,16 +32,24 @@ configuration = {
 
     'kalman_default_lat': -120,
     'kalman_default_lon': 48,
-    'offsets_per_site': 3,
-    'subfault_len': 60.,
-    'subfault_wid': 30.,
-    'smoothing': True,
-    'corner_fix': True,
-    'short_smoothing': True,
-    'strike_slip': False,
-    'float_equality': 1e-9
 }
 
+inverter_configuration = {
+    'sites': None,
+    'faults': None,
+    'strike_slip': False,
+    'short_smoothing': True,
+    'smoothing': True,
+    'corner_fix': True,
+    'float_equality': 1e-9,
+    'offsets_per_site': 3,
+    'subfault_len': 60.,
+    'subfault_wid': 30.
+}
+
+kalman_filter_configuration = {
+
+}
 
 def get_empty_kalman_state(sites, faults):
     delta_t = 1
@@ -95,8 +103,6 @@ def get_empty_kalman_state(sites, faults):
 
 def get_empty_inverter_state(sites, faults):
     inverter_state = {
-        'sites': sites,
-        'faults': faults,
         'sub_inputs': None,
         'alpha': 1.0,
         'cutoff': 0.,
@@ -142,7 +148,7 @@ measurement_definition = {
     'cv': 6.907785271563459
 }'''
 
-gps_data_queue_message_definition = {
+gps_measurement_message_definition = {
     'gps_data': None,
     'gps_data_timestamp': None,
     'gps_data_sequence_number': None,
@@ -151,56 +157,14 @@ gps_data_queue_message_definition = {
         'kalman_verified': None,
         'kalman_begin': None,
     },
-    'data_events': []
+    'data_events': [],
+    'configuration': None
 }
 
-post_kalman_queue_message_definition = {
-    'time_group': None,
-    'sequence_number': None,
-    'pre_kalman': None,
-    'kalman_data': {
-        'site': None,
-        'la': None,
-        'lo': None,
-        'mn': None,
-        'me': None,
-        'mv': None,
-        'kn': None,
-        'ke': None,
-        'kv': None,
-        'cn': None,
-        'ce': None,
-        'cv': None,
-        'he': None,
-        'ta': None,
-        'st': None,
-        'time': None,
-    },
-    'timestamps': {
-        'kalman_sent': None,
-    },
-    'data_events': []
-}
-
-grouped_inversion_queue_message_definition = {
-    'time_group': None,
-    'kalman_data': None,
-    'inverter_data': None,
-    'output_data': None,
-    'timestamps': {
-        'invert_timegroup_queued': None,
-        'invert_begin': None,
-        'invert_end': None,
-        'output_sent': None
-    },
-    'data_events': []
-}
-
-
-def get_gps_data_queue_message(prev_message=None, kalman_verify_step=False, kalman_filter_step=False,
+def get_gps_measurement_queue_message(prev_message=None, kalman_verify_step=False, kalman_filter_step=False,
                                gps_data=None, gps_data_sequence_number=None, kalman_data=None):
     if prev_message is None:
-        prev_message = copy.deepcopy(gps_data_queue_message_definition)
+        prev_message = copy.deepcopy(gps_measurement_message_definition)
     queue_message = {
         'gps_data': prev_message['gps_data'] if gps_data is None else gps_data,
         'gps_data_timestamp': prev_message['gps_data_timestamp'] if gps_data is None else gps_data['t'],
@@ -213,64 +177,101 @@ def get_gps_data_queue_message(prev_message=None, kalman_verify_step=False, kalm
             else prev_message['timestamps']['kalman_verified'],
             'kalman_begin': calendar.timegm(time.gmtime()) if kalman_filter_step is True
             else prev_message['timestamps']['kalman_begin']
-        }
+        },
+        'configuration': configuration
     }
     return queue_message
 
+kalman_output_definition = {
+    'site': None,
+    'la': None,
+    'lo': None,
+    'mn': None,
+    'me': None,
+    'mv': None,
+    'kn': None,
+    'ke': None,
+    'kv': None,
+    'cn': None,
+    'ce': None,
+    'cv': None,
+    'he': None,
+    'ta': None,
+    'st': None,
+    'time': None,
+}
 
-def get_post_kalman_queue_message(prev_message=None, pre_kalman=None, kalman_data=None):
-    if prev_message is None:
-        prev_message = copy.deepcopy(post_kalman_queue_message_definition)
-    if pre_kalman is not None:
-        time_group = 0
-        sequence_number = 0
-        for calculation in pre_kalman:
-            time_group = max(time_group, calculation['gps_data_timestamp'])
-        # No need for the newest number for this, it is used just as a tie-breaker for priority queue
-        sequence_number = pre_kalman[-1]['gps_data_sequence_number']
-    else:
-        pre_kalman = prev_message['pre_kalman']
-        time_group = prev_message['time_group']
-        sequence_number = prev_message['sequence_number']
-    queue_message = {
-        'pre_kalman': pre_kalman,
-        'time_group': time_group,
-        'sequence_number': sequence_number,
-        'kalman_data': prev_message['kalman_data'] if kalman_data is None else kalman_data,
-        'timestamps': {
-            'kalman_sent': calendar.timegm(time.gmtime()) if kalman_data is not None
-            else prev_message['timestamps']['kalman_sent'],
-        }
-    }
-    return queue_message
+grouped_inversion_queue_message_definition = {
+    'time_group': None,
+    'sequence_number': None,
+    'kalman_output_data': {},   # key: site name, value kalman_output_definition
+    'gps_measurement_data': None,
+    'inverter_output_data': None,
+    'slip_output_data': None,
+    'timestamps': {
+        'data_received': None,
+        'kalman_verified': None,
+        'kalman_begin': None,
+        'kalman_output_sent': None,
+        'invert_timegroup_queued': None,
+        'invert_begin': None,
+        'invert_end': None,
+        'output_sent': None
+    },
+    'data_events': [],
+    'configuration': None
+}
 
-
-def get_grouped_inversion_queue_message(prev_message=None, kalman_data=None, inverter_data=None,
-                                        output_data=None, inverter_begin=False, inverter_wait_queue_dequeue=False,
-                                        inverter_wait_queue_enqeue=False):
+def get_grouped_inversion_queue_message(prev_message=None,
+                                        gps_measurement_data=None,
+                                        kalman_output_data=None,
+                                        inverter_output_data=None,
+                                        slip_output_data=None,
+                                        inverter_begin=False,
+                                        inverter_wait_queue_dequeue=False,
+                                        configuration=None):
     if prev_message is None:
         prev_message = copy.deepcopy(grouped_inversion_queue_message_definition)
-    if kalman_data is not None:
-        # check time group for any arbitrary member of data set, they should all be the same
-        time_group = next(iter(kalman_data.values()))['time_group']
-        kalman_data = kalman_data
-    else:
+    if gps_measurement_data is None:
         time_group = prev_message['time_group']
-        kalman_data = prev_message['kalman_data']
+        sequence_number = prev_message['sequence_number']
+        data_received = prev_message['timestamps']['data_received']
+        kalman_begin = prev_message['timestamps']['kalman_begin']
+        kalman_verified = prev_message['timestamps']['kalman_verified']
+        gps_measurement_data = prev_message['gps_measurement_data']
+    else:
+        measurement = list(gps_measurement_data.keys())[0]
+        time_group = gps_measurement_data[measurement][0]['gps_data_timestamp']
+        sequence_number = gps_measurement_data[measurement][0]['gps_data_sequence_number']
+        data_received = gps_measurement_data[measurement][0]['timestamps']['data_received']
+        kalman_verified = gps_measurement_data[measurement][0]['timestamps']['kalman_verified']
+        kalman_begin = gps_measurement_data[measurement][0]['timestamps']['kalman_begin']
+
     queue_message = {
+        'gps_measurement_data': gps_measurement_data,
         'time_group': time_group,
-        'kalman_data': kalman_data,
-        'inverter_data': prev_message['inverter_data'] if inverter_data is None else inverter_data,
-        'output_data': prev_message['output_data'] if output_data is None else output_data,
+        'sequence_number': sequence_number,
+        'kalman_output_data': prev_message['kalman_output_data'] if kalman_output_data is None else
+                              kalman_output_data,
+        'inverter_output_data': prev_message['inverter_output_data'] if inverter_output_data is None else
+                                inverter_output_data,
+        'slip_output_data': prev_message['slip_output_data'] if slip_output_data is None else slip_output_data,
         'timestamps': {
+            'data_received': data_received,
+            'kalman_verified': kalman_verified,
+            'kalman_begin': kalman_begin,
+            'kalman_output_sent': calendar.timegm(time.gmtime()) if kalman_output_data is not None
+            else prev_message['timestamps']['kalman_output_sent'],
             'invert_timegroup_queued': calendar.timegm(time.gmtime()) if inverter_wait_queue_dequeue is True
             else prev_message['timestamps']['invert_timegroup_queued'],
             'invert_begin': calendar.timegm(time.gmtime()) if inverter_begin is True
             else prev_message['timestamps']['invert_begin'],
-            'invert_end': calendar.timegm(time.gmtime()) if inverter_data is not None
+            'invert_end': calendar.timegm(time.gmtime()) if inverter_output_data is not None
             else prev_message['timestamps']['invert_end'],
-            'output_sent': calendar.timegm(time.gmtime()) if output_data is not None
+            'output_sent': calendar.timegm(time.gmtime()) if slip_output_data is not None
             else prev_message['timestamps']['output_sent']
-        }
+        },
+        'configuration': configuration
     }
     return queue_message
+

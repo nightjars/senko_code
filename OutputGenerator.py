@@ -19,13 +19,12 @@ class OutputGeneratorThread(threading.Thread):
                 completed_inversion = self.input_queue.get(timeout=1)
 
                 self.completed_data_count += 1
-                self.logger.debug("Just completed {}".format(completed_inversion['inverter_data']))
+                self.logger.debug("Just completed {}".format(completed_inversion['inverter_output_data']))
                 self.logger.info(
                     "Inversion for time {} completed, beginning->end: {} seconds.  Inversion included {} kalman filter outputs.".format(
                         completed_inversion['time_group'],
                         completed_inversion['timestamps']['invert_end'] -
-                        completed_inversion['kalman_data'][0]['pre_kalman'][0]['timestamps']['data_received'],
+                        completed_inversion['timestamps']['data_received'],
                         len(completed_inversion['kalman_data'])))
-                print (json.dumps(completed_inversion['inverter_data']))
             except queue.Empty:
                 pass

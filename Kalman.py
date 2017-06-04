@@ -31,7 +31,7 @@ class KalmanThread(threading.Thread):
                     while not self.terminated and not kalman['measurement_queue'].empty():
                         try:
                             (_, _, measurement) = kalman['measurement_queue'].get(timeout=1)
-                            kalman['data_set'].append(DataStructures.get_gps_data_queue_message(measurement,
+                            kalman['data_set'].append(DataStructures.get_gps_measurement_queue_message(measurement,
                                                         kalman_filter_step=True))
                             self.process_measurement(kalman)
                         except queue.Empty:
@@ -195,7 +195,7 @@ class KalmanThread(threading.Thread):
 
     def generate_output(self, kalman):
         data_set = kalman['data_set']
-        kalman_data_output = {
+        kalman_data_output = {kalman['site']['name']: {
             'site': kalman['site']['name'],
             'la': kalman['site']['lat'],
             'lo': kalman['site']['lon'],
@@ -212,11 +212,13 @@ class KalmanThread(threading.Thread):
             'ta': kalman['tag'],
             'st': kalman['start_up'],
             'time': kalman['time'],
-        }
+        }}
         self.logger.debug("Kalman filter generating data for site {}, time {}".format(
             kalman['site']['name'], kalman['time']))
-        kalman_out = DataStructures.get_post_kalman_queue_message(pre_kalman=data_set, kalman_data=kalman_data_output)
-        self.output_queue.put((kalman_out['time_group'], kalman_out['sequence_number'], kalman_out))
+        kalman_out = DataStructures.get_grouped_inversion_queue_message(gps_measurement_data=
+                                                                        {kalman['site']['name']: data_set},
+                                                                        kalman_output_data=kalman_data_output)
+        self.output_queue.put((kalman['time'], kalman_out['sequence_number'], kalman_out))
 
     def pass_state_start(self, kalman):
         kalman['i_state'] = kalman['state'] * 1.

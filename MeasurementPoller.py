@@ -13,7 +13,7 @@ class MeasurementPoller:
         self.sequence_number = 0
 
     def send_measurement(self, measurement):
-        self.output_queue.put(DataStructures.get_gps_data_queue_message(gps_data=measurement,
+        self.output_queue.put(DataStructures.get_gps_measurement_queue_message(gps_data=measurement,
                                                                gps_data_sequence_number=self.sequence_number))
         self.sequence_number += 1
 
