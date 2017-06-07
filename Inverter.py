@@ -3,7 +3,7 @@ import DataStructures
 import numpy as np
 from scipy import optimize
 from datetime import datetime as dt
-import time as Time
+import time
 import logging
 import math
 import ok
@@ -22,15 +22,14 @@ class InverterThread(threading.Thread):
     def run(self):
         while not self.terminated:
             try:
-                (time, kalman_data, conf) = self.input_queue.get(timeout=1)
+                (time_stamp, kalman_data, conf) = self.input_queue.get(timeout=1)
                 self.logger.debug("Got a group for time {} with {} kalman sets in it".
-                                  format(time, len(kalman_data['kalman_output_data'])))
+                                  format(time_stamp, len(kalman_data['kalman_output_data'])))
                 kalman_data = DataStructures.get_grouped_inversion_queue_message(prev_message=kalman_data,
                                                                                  inverter_begin=True)
 
-                offset, add_matrix, sub_inputs, smooth_mat, mask = InverterConfiguration.get_config(conf)
+                offset, sub_inputs, smooth_mat, mask = InverterConfiguration.get_config(conf)
                 offset = np.copy(offset)
-                add_matrix = np.copy(add_matrix)
                 sub_inputs = np.copy(sub_inputs)
                 mask = np.copy(mask)
                 sites = conf['sites']
@@ -58,7 +57,7 @@ class InverterThread(threading.Thread):
                 calc_offset = sub_inputs.dot(solution)
 
                 output = self.generate_output(solution, kalman_data['kalman_output_data'], site_correlate,
-                                              calc_offset, time, conf)
+                                              calc_offset, time_stamp, conf)
 
                 kalman_data = DataStructures.get_grouped_inversion_queue_message(prev_message=kalman_data,
                                                                                  inverter_output_data=output)
@@ -67,7 +66,7 @@ class InverterThread(threading.Thread):
                 pass
 
 
-    def generate_output(self, solution, kalman_data, correlate, calc_offset, time, conf):
+    def generate_output(self, solution, kalman_data, correlate, calc_offset, time_stamp, conf):
         faults = conf['faults']
         fault_sol = []
         magnitude = 0.0
@@ -147,9 +146,9 @@ class InverterThread(threading.Thread):
         magnitude_str = "{:.2E}".format(magnitude)
 
         output = {
-            'time': time[-1],
+            'time': time_stamp[-1],
             'data': site_data,
-            'label': "label and model to appear" + dt.utcfromtimestamp(float(time[-1])).strftime("%Y-%m-%d %H:%M:%S %Z"),
+            'label': "label and model to appear" + dt.utcfromtimestamp(float(time_stamp[-1])).strftime("%Y-%m-%d %H:%M:%S %Z"),
             'slip': slip,
             'estimates': estimates,
             'Moment': magnitude_str,
@@ -177,6 +176,7 @@ class InverterConfiguration:
 
     @staticmethod
     def config_generator(conf):
+        start_time = time.time()
         InverterConfiguration.logger.info("Starting inverter config processing.")
         offset_count = conf['offsets_per_site']
         subfault_wid = int(conf['faults']['width'])
@@ -189,7 +189,6 @@ class InverterConfiguration:
         offset = np.zeros((1, len(conf['sites']) * offset_count + len(conf['faults']['subfault_list'])))
         mask = np.zeros((len(conf['sites']) * offset_count + len(conf['faults']['subfault_list']), 1))
 
-        add_matrix = np.zeros((subfault_len, len(conf['faults']['subfault_list'])))
         sub_inputs = np.zeros((len(conf['sites']) * offset_count, len(conf['faults']['subfault_list'])))
         smooth_mat = np.zeros((len(conf['faults']['subfault_list']), len(conf['faults']['subfault_list'])))
 
@@ -228,5 +227,6 @@ class InverterConfiguration:
                 for x in range(len(conf['faults']['subfault_list'])):
                     smooth_mat[x, x] = -4
         mask[-len(conf['faults']['subfault_list']):,0] = 1
-        InverterConfiguration.logger.info("Finished inverter config processing.")
-        return offset, add_matrix, sub_inputs, smooth_mat, mask
+        elapsed_time = time.time() - start_time
+        InverterConfiguration.logger.info("Finished inverter config processing in {} seconds.".format(elapsed_time))
+        return offset, sub_inputs, smooth_mat, mask

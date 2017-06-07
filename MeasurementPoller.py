@@ -5,12 +5,16 @@ import random
 import time
 import calendar
 import amqp
+import requests
 
 class MeasurementPoller:
     def __init__(self, output_queue):
         self.output_queue = output_queue
         self.terminated = False
         self.sequence_number = 0
+
+        self.config = DataLoader.load_data_from_text_files(sites_data_file=DataStructures.configuration['sites_file'],
+                                                           faults_data_file=DataStructures.configuration['faults_file'])
 
     def send_measurement(self, measurement):
         self.output_queue.put(DataStructures.get_gps_measurement_queue_message(gps_data=measurement,
@@ -54,11 +58,10 @@ class RabbitMQPoller(MeasurementPoller):
         print ("about to start consuming")
         channel.start_consuming()
 
+
 class NonsensePoller(MeasurementPoller):
     def __init__(self, output_queue):
         super(NonsensePoller, self).__init__(output_queue)
-        self.config = DataLoader.load_data_from_text_files(sites_data_file=DataStructures.configuration['sites_file'],
-                                                           faults_data_file=DataStructures.configuration['faults_file'])
 
     def start(self):
         threading.Thread(target=self.nonsense_generator).start()
@@ -86,4 +89,64 @@ class NonsensePoller(MeasurementPoller):
                     self.send_measurement(new_data)
             time.sleep(random.random() * 0.2)
 
+class PangaAPIPoller(MeasurementPoller):
+    panga_url = 'http://www.panga.org/realtime/data/api-test20170228'
+    stream_list = '/streamlist'
+    stream_poll = '/slice?streams={}&window={}'
+    stream_string = 'CWU_fastlane'
+    records_string = '/records/{}_CWU_fastlane?&fe=covariance&l={}'
+    max_requests_per_poll = 100
+
+    def __init__(self, output_queue):
+        self.streams = {}
+        self.stream_list = []
+        super(PangaAPIPoller, self).__init__(output_queue)
+
+    def start(self):
+        start_time = calendar.timegm(time.gmtime())
+        sites = self.config['sites']
+        r = requests.get(PangaAPIPoller.panga_url + PangaAPIPoller.stream_list)
+        json_response = r.json()
+        for i in range(0, len(json_response), 2):
+            if json_response[i] in sites:
+                self.streams[json_response[i]] = json_response[i + 1]
+                self.stream_list.append([json_response[i], start_time])
+            else:
+                print ("Skipping {}".format(json_response[i]))
+
+        threading.Thread(target=self.panga_puller).start()
+        MeasurementPoller.start(self)
+
+    def panga_puller(self):
+        while not self.terminated:
+            s = requests.Session()
+            start = time.time()
+            for site in self.stream_list:
+                if site[1] > 0:
+                    site_info = s.get(PangaAPIPoller.panga_url +
+                                      PangaAPIPoller.records_string.format(site[0], site[1]))
+                    mea = site_info.json()
+                    print (mea)
+                    if 'error' in mea:
+                        site[1] = -1
+                    else:
+                        for values in mea['recs']:
+                            new_data = {
+                                't': int(values['t']),
+                                'site': site[0],
+                                'cnv': float(values['cnv']),
+                                'e': float(values['e']),
+                                'cn': float(values['cn']),
+                                'ce': float(values['ce']),
+                                'n': float(values['n']),
+                                'cev': float(values['cev']),
+                                'cne': float(values['cne']),
+                                'v': float(values['v']),
+                                'cv': float(values['cv'])
+                            }
+                            self.send_measurement(new_data)
+                            site[1] = max(site[1], new_data['t'])
+
 #a = RabbitMQPoller(None)
+a = PangaAPIPoller(None)
+a.start()

@@ -18,7 +18,7 @@ configuration = {
                   },
     'kalman_stale': 300,  # (seconds) Time before kalman states are wiped
     'group_timespan': 1,  # (seconds) Group batches of data in timespan
-    'delay_timespan': 15,  # (seconds) Time to wait for laggard data
+    'delay_timespan': 60,  # (seconds) Time to wait for laggard data
     'idle_sleep_time': 0.1,  # (seconds) Time to sleep to avoid busy wait loops
 
     'minimum_offset': -1.,  # for validator
