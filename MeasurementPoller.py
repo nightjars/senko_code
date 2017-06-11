@@ -111,8 +111,6 @@ class PangaAPIPoller(MeasurementPoller):
             if json_response[i] in sites:
                 self.streams[json_response[i]] = json_response[i + 1]
                 self.stream_list.append([json_response[i], start_time])
-            else:
-                print ("Skipping {}".format(json_response[i]))
 
         threading.Thread(target=self.panga_puller).start()
         MeasurementPoller.start(self)
@@ -120,17 +118,16 @@ class PangaAPIPoller(MeasurementPoller):
     def panga_puller(self):
         while not self.terminated:
             s = requests.Session()
-            start = time.time()
             for site in self.stream_list:
                 if site[1] > 0:
                     site_info = s.get(PangaAPIPoller.panga_url +
                                       PangaAPIPoller.records_string.format(site[0], site[1]))
-                    mea = site_info.json()
-                    print (mea)
-                    if 'error' in mea:
-                        site[1] = -1
+                    measurements = site_info.json()
+                    if 'error' in measurements:
+                        pass
+                        #site[1] = -1
                     else:
-                        for values in mea['recs']:
+                        for values in measurements['recs']:
                             new_data = {
                                 't': int(values['t']),
                                 'site': site[0],
@@ -148,5 +145,5 @@ class PangaAPIPoller(MeasurementPoller):
                             site[1] = max(site[1], new_data['t'])
 
 #a = RabbitMQPoller(None)
-a = PangaAPIPoller(None)
-a.start()
+#a = PangaAPIPoller(None)
+#a.start()

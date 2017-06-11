@@ -52,9 +52,30 @@ class InverterTests(unittest.TestCase):
                 InverterTests.old_result = opipe[1].recv()
                 old_elapsed_time = time.time() - start
 
-                new_i.terminated = True
                 self.logger.info("New inverter time to execute: {} seconds".format(new_elapsed_time))
                 self.logger.info("Old inverter time to execute: {} seconds".format(old_elapsed_time))
+
+                # restart pipe watcher, modified old inverter exits after one run
+                old_thread = threading.Thread(target=old_i.Run)
+                old_thread.start()
+
+                start = time.time()
+                inverter_in_queue.put(full_inverter_msg)
+                inverter_out_queue.get()['inverter_output_data']
+                new_elapsed_time = time.time() - start
+
+                start = time.time()
+                station_data = []
+                for _, data in old_inverter_msg['kalman_output_data'].items():
+                    station_data.append([data['time'], data])
+
+                ipipe[1].send(station_data)
+                opipe[1].recv()
+                old_elapsed_time = time.time() - start
+
+                new_i.terminated = True
+                self.logger.info("Second run: new inverter time to execute: {} seconds".format(new_elapsed_time))
+                self.logger.info("Second run: old inverter time to execute: {} seconds".format(old_elapsed_time))
 
     def test_compare_slip_output_lengths(self):
         old_slip = InverterTests.old_result['slip']

@@ -1,4 +1,6 @@
 import logging
+import sqlite3 as lite
+import sys
 
 
 def load_data_from_text_files(sites_data_file, faults_data_file):
@@ -36,3 +38,5 @@ def load_data_from_text_files(sites_data_file, faults_data_file):
         raise e
 
     return {'sites': sites_dict, 'faults': faults}
+
+
