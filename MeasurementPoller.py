@@ -6,6 +6,7 @@ import time
 import calendar
 import amqp
 import requests
+import json
 
 class MeasurementPoller:
     def __init__(self, output_queue):
@@ -28,22 +29,23 @@ class MeasurementPoller:
         self.terminated = True
 
 class RabbitMQPoller(MeasurementPoller):
+    poller_instance = None
 
     def __init__(self, output_queue):
         super(RabbitMQPoller, self).__init__(output_queue)
         threading.Thread(target=self.rabbit_poller).start()
+        RabbitMQPoller.poller_instance = self
 
     @staticmethod
-    def message_callback(ch, method, properties, body):
-        print ("callback")
-        print (body)
+    def message_callback(msg):
+        RabbitMQPoller.poller_instance.send_measurement(json.loads(msg.body))
 
     def rabbit_poller(self):
         connection = amqp.Connection(
             host=DataStructures.configuration['rabbit_mq']['host'],
             userid=DataStructures.configuration['rabbit_mq']['userid'],
             password=DataStructures.configuration['rabbit_mq']['password'],
-            virtual_host=None, #DataStructures.configuration['rabbit_mq']['virtual_host'],
+            virtual_host=DataStructures.configuration['rabbit_mq']['virtual_host'],
             exchange=DataStructures.configuration['rabbit_mq']['exchange_name']
         )
         print ("about to connect")
@@ -54,10 +56,13 @@ class RabbitMQPoller(MeasurementPoller):
                                  'test_fanout', passive=True)
         queue_name = channel.queue_declare(exclusive=True)[0]
         channel.queue_bind(queue_name, exchange=DataStructures.configuration['rabbit_mq']['exchange_name'])
-        channel.basic_consume(RabbitMQPoller.message_callback, queue=DataStructures.configuration['rabbit_mq']['exchange_name'])
+        channel.basic_consume(callback=RabbitMQPoller.message_callback,
+                              queue=queue_name,
+                              no_ack=True)
         print ("about to start consuming")
-        channel.start_consuming()
-
+        while not self.terminated:
+            connection.drain_events()
+        connection.close()
 
 class NonsensePoller(MeasurementPoller):
     def __init__(self, output_queue):
@@ -111,6 +116,8 @@ class PangaAPIPoller(MeasurementPoller):
             if json_response[i] in sites:
                 self.streams[json_response[i]] = json_response[i + 1]
                 self.stream_list.append([json_response[i], start_time])
+            else:
+                print ("Skipping {}".format(json_response[i]))
 
         threading.Thread(target=self.panga_puller).start()
         MeasurementPoller.start(self)
@@ -118,16 +125,17 @@ class PangaAPIPoller(MeasurementPoller):
     def panga_puller(self):
         while not self.terminated:
             s = requests.Session()
+            start = time.time()
             for site in self.stream_list:
                 if site[1] > 0:
                     site_info = s.get(PangaAPIPoller.panga_url +
                                       PangaAPIPoller.records_string.format(site[0], site[1]))
-                    measurements = site_info.json()
-                    if 'error' in measurements:
-                        pass
-                        #site[1] = -1
+                    mea = site_info.json()
+                    print (mea)
+                    if 'error' in mea:
+                        site[1] = -1
                     else:
-                        for values in measurements['recs']:
+                        for values in mea['recs']:
                             new_data = {
                                 't': int(values['t']),
                                 'site': site[0],

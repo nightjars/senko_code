@@ -11,7 +11,7 @@ configuration = {
     'sites_file': './sta_offset2.d',
     'faults_file': './subfaults.d',
     'rabbit_mq': {'exchange_name': 'fastlane-nev-cov',
-                  'host': 'pc96445.d.cwu.edu',
+                  'host': 'localhost:9000', #''pc96445.d.cwu.edu',
                   'userid': 'panga_ro',
                   'password': 'ro',
                   'virtual_host': '/CWU-ppp'
