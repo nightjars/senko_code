@@ -11,14 +11,14 @@ configuration = {
     'sites_file': './sta_offset2.d',
     'faults_file': './subfaults.d',
     'rabbit_mq': {'exchange_name': 'fastlane-nev-cov',
-                  'host': 'localhost:9000', #''pc96445.d.cwu.edu',
+                  'host': 'pc96445.d.cwu.edu',
                   'userid': 'panga_ro',
                   'password': 'ro',
                   'virtual_host': '/CWU-ppp'
                   },
     'kalman_stale': 300,  # (seconds) Time before kalman states are wiped
     'group_timespan': 1,  # (seconds) Group batches of data in timespan
-    'delay_timespan': 60,  # (seconds) Time to wait for laggard data
+    'delay_timespan': 15,  # (seconds) Time to wait for laggard data
     'idle_sleep_time': 0.1,  # (seconds) Time to sleep to avoid busy wait loops
 
     'minimum_offset': -1.,  # for validator
@@ -40,7 +40,7 @@ inverter_configuration = {
     'strike_slip': False,
     'short_smoothing': True,
     'smoothing': True,
-    'corner_fix': True,
+    'corner_fix': False,
     'float_equality': 1e-9,
     'offsets_per_site': 3,
     'subfault_len': 60.,

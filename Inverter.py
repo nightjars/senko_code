@@ -35,24 +35,31 @@ class InverterThread(threading.Thread):
                 sites = conf['sites']
 
                 site_correlate = []
-
+                print ("new")
                 for site, kalman_output in kalman_data['kalman_output_data'].items():
                     site_idx = sites[site]['index']
                     site_correlate.append((site_idx, sites[site]))
                     mask[site_idx * 3: site_idx * 3 + 3, 0] = 1
                     if kalman_output['ta']:
-                        offset[0, site_idx * 3] = kalman_output['kn']
-                        offset[0, site_idx * 3 + 1] = kalman_output['ke']
-                        offset[0, site_idx * 3 + 2] = kalman_output['kv']
+                        offset[site_idx * 3] = kalman_output['kn']
+                        offset[site_idx * 3 + 1] = kalman_output['ke']
+                        offset[site_idx * 3 + 2] = kalman_output['kv']
                     else:
-                        offset[0, site_idx * 3: site_idx * 3 + 3] = 0
+                        offset[site_idx * 3: site_idx * 3 + 3] = 0
 
                 site_correlate.sort(key=lambda idx: idx[0])
+                valid_site_indexes = np.argwhere(mask[:len(sites)*3, 0] > 0)[:, 0]
+                valid_site_fault_indexes = np.argwhere(mask[:, 0] > 0)[:, 0]
+                present_sub_inputs = sub_inputs[valid_site_indexes, :]
+                sub_inputs = np.vstack([present_sub_inputs, smooth_mat])
+                present_offsets = offset[valid_site_fault_indexes]
 
-                sub_inputs = np.vstack([sub_inputs, smooth_mat])
-                present_sub_inputs = np.take(sub_inputs, np.argwhere(mask > 0)[:, 0])
-
-                solution = optimize.nnls(sub_inputs, offset[0])[0]
+                solution = optimize.nnls(sub_inputs, present_offsets)[0]
+                for idx, s in enumerate(site_correlate):
+                    print(s[1]['name'])
+                    print(present_sub_inputs[idx * 3])
+                    print(present_sub_inputs[idx * 3 + 1])
+                    print(present_sub_inputs[idx * 3 + 2])
 
                 calc_offset = sub_inputs.dot(solution)
 
@@ -186,7 +193,7 @@ class InverterConfiguration:
         corner_fix = conf['corner_fix']
         short_smoothing = conf['short_smoothing']
 
-        offset = np.zeros((1, len(conf['sites']) * offset_count + len(conf['faults']['subfault_list'])))
+        offset = np.zeros((len(conf['sites']) * offset_count + len(conf['faults']['subfault_list'])))
         mask = np.zeros((len(conf['sites']) * offset_count + len(conf['faults']['subfault_list']), 1))
 
         sub_inputs = np.zeros((len(conf['sites']) * offset_count, len(conf['faults']['subfault_list'])))
@@ -194,7 +201,14 @@ class InverterConfiguration:
 
         for site_key, site in conf['sites'].items():
             for fault_idx, fault in enumerate(conf['faults']['subfault_list']):
-                result = ok.dc3d(fault[0], fault[1], fault[2], fault[3], fault[4], 0., fault[5], fault[6],
+                convergence = -1
+                rake = fault[3] - convergence
+                rake += 180
+                if rake < 0:
+                    rake += 360
+                if rake > 360:
+                    rake -= 360
+                result = ok.dc3d(fault[0], fault[1], fault[2], fault[3], fault[4], rake, fault[5], fault[6],
                                  1, 0, site['lat'], site['lon'], 0)
                 sub_inputs[site['index']*3, fault_idx] = float(result[0])
                 sub_inputs[site['index']*3+1, fault_idx] = float(result[1])

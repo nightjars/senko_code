@@ -230,13 +230,49 @@ class TVLiveSlip:
             temp = a.copy()
             temp.resize((3, len(self.Faults)))
 
-            count = 0
-
             with open('./sta_offset2.d', 'r') as file:
                 while True:
                     line2 = file.readline().split()
                     if not line2: break
                     if (line2[0] == t[1]): break
+
+            with open('./site_lat_lon_ele.txt', 'r') as file:
+                while True:
+                    line = file.readline().split()
+                    if not line: break
+                    if (line[0] == t[1]): break
+
+            count = 0
+            for num in range(len(self.Faults)):
+                com = []
+                com.append(float(self.Faults[num][0]))
+                com.append(float(self.Faults[num][1]))
+                com.append(float(self.Faults[num][2]))
+                com.append(float(self.Faults[num][3]))
+                com.append(float(self.Faults[num][4]))
+                Rake = com[3] - self.Convergence
+                Rake = Rake + 180.
+                if (Rake < 0.):
+                    Rake = Rake + 360
+                if (Rake > 360.):
+                    Rake = Rake - 360.
+                # self.Faults[num].append( Rake )
+                com.append(Rake)
+                com.append(float(self.Faults[num][5]))
+                com.append(float(self.Faults[num][6]))
+                com.append(1)
+                com.append(0)
+                com.append(float(line[1]))
+                com.append(float(line[2]))
+                com.append(0)
+
+                info = ok.dc3d(com[0], com[1], com[2], com[3], com[4], com[5], com[6], com[7], com[8], com[9], com[10],
+                               com[11], com[12])
+                temp[0,num] = float(info[0])
+                temp[1,num] = float(info[1])
+                temp[2,num] = float(info[2])
+
+
 
             # mag = np.sqrt( info[0]**2 + info[1]**2 + info[2]**2 )
             # if( ( mag > self.minOffset ) ):
@@ -300,6 +336,7 @@ class TVLiveSlip:
         '''for i in range( len( Faults ) * 2 ):
             k = np.shape( Mask)[0] - i - 1
             Mask[ k, k ] = 1.'''
+        print ("old")
 
         for i in range(len(Faults)):
             k = np.shape(Mask)[0] - i - 1
@@ -386,6 +423,7 @@ class TVLiveSlip:
                             # print lit
                             # time.sleep( 0.1 )
         # print SubInputs.shape
+
         SubInputs = np.vstack([SubInputs, smoothMat])
 
         # print "Got Here 2 in " + str( dt.now() - date )
@@ -423,7 +461,12 @@ class TVLiveSlip:
         invend = dt.now()
         # print Solution
         Solution = Solution[0]
-        # print Solution.shape
+        for idx, s in enumerate(Correlate):
+            print (s[0])
+            print (SI[idx * 3])
+            print(SI[idx * 3 + 1])
+            print(SI[idx * 3 + 2])
+        # print Solutionl.shape
         print
         "Inversion finished in " + str(invend - invbegin)
         # Solution = np.matrix( Solution[0] )

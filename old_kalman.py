@@ -474,6 +474,7 @@ class Kalman:
             self.passupdateState()
 
     def updateMat(self):
+        #self.output_state(print, "Old Kal UM")
         logging.info("Starting Kalman_updateMat at time: {}".format(dt.now()))
         if (self.prevTime != 0):
             self.delta_T = self.Time - self.prevTime
@@ -529,6 +530,7 @@ class Kalman:
             self.determineState()
 
     def determineState(self):
+        #self.output_state(print, "Old Kal DS")
         logging.info("Starting Kalman_determineState at time: {}".format(dt.now()))
         # print self.SMCount
         # print self.smoothing
@@ -608,6 +610,7 @@ class Kalman:
 
 
     def EQState(self):
+        #self.output_state(print, "Old Kal PEQS")
         logging.info("Starting Kalman_EQState at time: {}".format(dt.now()))
         if (self.EQPrint == True):
             print
@@ -670,6 +673,7 @@ class Kalman:
         self.OverrideFlag = False
         self.SMea = []
         # self.updateMat( )
+        #self.output_state(print, "Old Kal AEQS")
 
     def FalseEQState(self):
         if (self.EQPrint == True):

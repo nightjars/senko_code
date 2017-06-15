@@ -7,6 +7,8 @@ import calendar
 import amqp
 import requests
 import json
+import queue
+import sys
 
 class MeasurementPoller:
     def __init__(self, output_queue):
@@ -152,6 +154,42 @@ class PangaAPIPoller(MeasurementPoller):
                             self.send_measurement(new_data)
                             site[1] = max(site[1], new_data['t'])
 
+class SavedMeasurementPoller(MeasurementPoller):
+    def __init__(self, output_queue, input_file='./saved_gps_data/out_600_sec'):
+        self.input_file = input_file
+        super(SavedMeasurementPoller, self).__init__(output_queue)
+
+    def start(self):
+        with open(self.input_file) as f:
+            data = json.load(f)
+
+        init_time = None
+        for d in data:
+            if not self.terminated:
+                if init_time is None:
+                    init_time = calendar.timegm(time.gmtime()) - d['t']
+                d['t'] += init_time
+                self.send_measurement(d)
+
+def save_measurements(filename = 'data_output', seconds_to_save = 20):
+    q = queue.Queue()
+    poller = RabbitMQPoller(q)
+    msg = q.get()
+    data = []
+    print (msg)
+    first_timestamp = msg['gps_data']['t']
+    current_timestamp = msg['gps_data']['t']
+    while current_timestamp - first_timestamp < seconds_to_save:
+        data.append(q.get()['gps_data'])
+        current_timestamp = data[-1]['t']
+
+    with open(filename, 'w') as f:
+        json.dump(data, f)
+
+    poller.stop()
+
+#save_measurements(filename=sys.argv[1], seconds_to_save=int(sys.argv[2]))
 #a = RabbitMQPoller(None)
 #a = PangaAPIPoller(None)
+#a = SavedMeasurementPoller(None)
 #a.start()

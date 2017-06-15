@@ -18,11 +18,14 @@ class InverterTests(unittest.TestCase):
         with InverterTests.test_run_lock:
             if InverterTests.old_result is None:
                 data_source = mp.Queue()
+                DataStructures.configuration['inverter_queue_threshold'] = 10000
                 lf = LiveFilter.LiveFilter()
                 lf.data_router.inverter_queue = data_source
                 lf.start()
 
-                full_inverter_msg = data_source.get()
+                for i in range(100):
+                    full_inverter_msg = data_source.get()
+
                 old_inverter_msg = full_inverter_msg[1]
                 lf.stop()
 

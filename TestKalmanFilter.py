@@ -31,7 +31,7 @@ class TestKalmanFilter(unittest.TestCase):
 
                 #collect a few messages for a site
                 data_messages = []
-                while len(data_messages) < 15:
+                while len(data_messages) < 500:
                     msg = data_source.get()
                     if len(data_messages):
                         # to simplify things, filter out all but a single site
@@ -65,10 +65,12 @@ class TestKalmanFilter(unittest.TestCase):
                 for message in data_messages:
                     ipipe[1].send(message['gps_data'])
 
-                time.sleep(5)
+                time.sleep(3)
 
                 while opipe[1].poll():
-                        old_data_back.append(opipe[1].recv())
+                    while opipe[1].poll():
+                            old_data_back.append(opipe[1].recv())
+                    time.sleep(2)
 
 
                 new_data_back = []
@@ -80,11 +82,14 @@ class TestKalmanFilter(unittest.TestCase):
                 if not new_kal_state['lock'].locked():
                     new_kal_in.put(new_kal_state)
 
-                time.sleep(5)
+                time.sleep(3)
                 while not new_kal_out.empty():
-                    _, _, data = new_kal_out.get(timeout=1)
-                    for _, val in data['kalman_output_data'].items():
-                        new_data_back.append(val)
+                    while not new_kal_out.empty():
+                            _, _, data = new_kal_out.get(timeout=5)
+                            for _, val in data['kalman_output_data'].items():
+                                new_data_back.append(val)
+                    time.sleep(2)
+
 
 
                 new_kal.terminated = True
@@ -94,6 +99,8 @@ class TestKalmanFilter(unittest.TestCase):
                 TestKalmanFilter.new_result = new_data_back
 
     def test_kalman_data_length(self):
+        self.logger.info("Output lengths: {}, {}".format(len(TestKalmanFilter.old_result),
+                                                         len(TestKalmanFilter.new_result)))
         self.assertEqual(len(TestKalmanFilter.old_result), len(TestKalmanFilter.new_result),
                          "Output lengths do not match!")
 
