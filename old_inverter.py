@@ -336,7 +336,6 @@ class TVLiveSlip:
         '''for i in range( len( Faults ) * 2 ):
             k = np.shape( Mask)[0] - i - 1
             Mask[ k, k ] = 1.'''
-        print ("old")
 
         for i in range(len(Faults)):
             k = np.shape(Mask)[0] - i - 1
@@ -461,11 +460,6 @@ class TVLiveSlip:
         invend = dt.now()
         # print Solution
         Solution = Solution[0]
-        for idx, s in enumerate(Correlate):
-            print (s[0])
-            print (SI[idx * 3])
-            print(SI[idx * 3 + 1])
-            print(SI[idx * 3 + 2])
         # print Solutionl.shape
         print
         "Inversion finished in " + str(invend - invbegin)

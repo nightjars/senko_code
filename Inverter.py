@@ -35,7 +35,6 @@ class InverterThread(threading.Thread):
                 sites = conf['sites']
 
                 site_correlate = []
-                print ("new")
                 for site, kalman_output in kalman_data['kalman_output_data'].items():
                     site_idx = sites[site]['index']
                     site_correlate.append((site_idx, sites[site]))
@@ -55,11 +54,6 @@ class InverterThread(threading.Thread):
                 present_offsets = offset[valid_site_fault_indexes]
 
                 solution = optimize.nnls(sub_inputs, present_offsets)[0]
-                for idx, s in enumerate(site_correlate):
-                    print(s[1]['name'])
-                    print(present_sub_inputs[idx * 3])
-                    print(present_sub_inputs[idx * 3 + 1])
-                    print(present_sub_inputs[idx * 3 + 2])
 
                 calc_offset = sub_inputs.dot(solution)
 

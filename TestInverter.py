@@ -90,15 +90,16 @@ class InverterTests(unittest.TestCase):
         new_slip = InverterTests.new_result['slip']
         for x, slip in enumerate(old_slip):
             for y in range(len(slip)):
-                self.assertEqual(float(old_slip[x][y]), float(new_slip[x][y]),
-                    "Slip data at position [{},{}] doesn't match.".format(x, y))
+                self.assertAlmostEqual(float(old_slip[x][y]), float(new_slip[x][y]), places=13,
+                    msg="Slip data at position [{},{}] doesn't match.".format(x, y))
+
 
     def test_compare_dict_data_contents(self):
         for test_compare in ['data', 'estimates']:
             old_data = InverterTests.old_result[test_compare]
             new_data = InverterTests.new_result[test_compare]
             self.assertEqual(len(old_data), len(new_data),
-                             "Output lengths for {} don't match.".format(test_compare))
+                             msg="Output lengths for {} don't match.".format(test_compare))
 
             data_dict = {}
             for item in old_data:
@@ -111,14 +112,15 @@ class InverterTests(unittest.TestCase):
                         old_item[x] = float(old_item[x])
                     except:
                         pass
-                    self.assertEqual(item[x], old_item[x], "Data for {} does not match for {} element {}.".format(
-                        test_compare, item[0], x))
+                    self.assertAlmostEqual(item[x], old_item[x], places=13,
+                        msg="Data for {} does not match for {} element {}.".
+                        format(test_compare, item[0], x))
 
     def test_compare_simple_elements(self):
         for ele_compare in ['time', 'Moment', 'Magnitude']:
-            self.assertEqual(InverterTests.old_result[ele_compare],
-                             InverterTests.new_result[ele_compare],
-                             "Data for {} does not match.".format(ele_compare))
+            self.assertAlmostEqual(InverterTests.old_result[ele_compare],
+                             InverterTests.new_result[ele_compare], places=13,
+                             msg="Data for {} does not match.".format(ele_compare))
 
 
 if __name__ == '__main__':
