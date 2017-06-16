@@ -9,6 +9,7 @@ import requests
 import json
 import queue
 import sys
+import math
 
 class InverterValidator(threading.Thread):
     old_data = {}
@@ -70,7 +71,9 @@ class InverterValidator(threading.Thread):
             old[x] = o[x]
         for x in n:
             new[x] = n[x]
+        print ("Old output------------")
         print (o)
+        print("New output------------")
         print (n)
         check_list = ['M', 'Mw', 'label', 't', 'tag', 'model']
         display_list = [ 'M', 'w', 'l', 't', 'g', 'm']
@@ -82,7 +85,7 @@ class InverterValidator(threading.Thread):
         if slip_len:
             slip_same = True
             for idx, slip in enumerate(old['slip']):
-                if slip != new['slip'][idx]:
+                if not math.isclose(float(slip), float(new['slip'][idx])):
                     slip_same = False
         else:
             slip_same = False
