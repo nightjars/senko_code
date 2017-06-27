@@ -11,8 +11,8 @@ class OutputGeneratorThread(threading.Thread):
         self.input_queue = input_queue
         self.terminated = False
         self.completed_data_count = 0
-        self.cir = CompareInverterResults.InverterValidator()
-        self.cir.start()
+        #self.cir = CompareInverterResults.InverterValidator()
+        #self.cir.start()
         threading.Thread.__init__(self)
 
     def run(self):
@@ -42,7 +42,8 @@ class OutputGeneratorThread(threading.Thread):
                         'M': output_data['Moment']
                     })
                 }
-                self.cir.new_inverter_data(output)
+                print (output)
+                #self.cir.new_inverter_data(output)
                 # with open('./invert_output/{}.json'.format(completed_inversion['inverter_output_data']['time']), 'a') as out_file:
                 #    json.dump(completed_inversion['inverter_output_data'], out_file)
                 #self.logger.debug("Just completed {}".format(completed_inversion['inverter_output_data']))

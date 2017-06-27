@@ -195,7 +195,7 @@ class InverterConfiguration:
 
         for site_key, site in conf['sites'].items():
             for fault_idx, fault in enumerate(conf['faults']['subfault_list']):
-                convergence = -1
+                convergence = DataStructures.configuration['convergence']
                 rake = fault[3] - convergence
                 rake += 180
                 if rake < 0:

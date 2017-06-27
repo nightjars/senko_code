@@ -9,16 +9,17 @@ def load_data_from_text_files(sites_data_file, faults_data_file):
     with open (sites_data_file) as file:
         sites = [x.split() for x in file.readlines() if x[0] != '#']
 
-    for idx, site in enumerate(sites):
+    for site in sites:
         station = {
             'name': site[0],
             'lat': float(site[1]),
             'lon': float(site[2]),
             'height': float(site[3]),
-            'minimum_offset': float(site[4]),
-            'index': idx                            # store index for array sequencing
+            'offset': float(site[4]),
+            'index': len(sites_dict)                            # store index for array sequencing
         }
-        sites_dict[station['name']] = station
+        if station['name'] not in sites_dict:
+            sites_dict[station['name']] = station
 
     # Allow appending new stations once programming is running without having to iterate through
     # full list of sites by storing last-used-index

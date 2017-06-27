@@ -31,11 +31,9 @@ class PrecalculatedOffsetValidator(ValidatorThread):
                 new_data = self.input_queue.get(timeout=1)
                 if new_data['gps_data']['site'] in calcdata:
                     # this seems to be a completely static thing, not dependent on the data coming in, is this intended?
-                    if calcdata[new_data['gps_data']['site']]['minimum_offset'] >= DataStructures.configuration['minimum_offset']:
+                    if calcdata[new_data['gps_data']['site']]['offset'] >= DataStructures.configuration['minimum_offset']:
                         self.output_queue.put(DataStructures.get_gps_measurement_queue_message
                                               (new_data,kalman_verify_step=True))
-                    else:
-                        self.logger.info("Ignoring {} {}".format(new_data['gps_data']['site'], calcdata[new_data['gps_data']['site']]['minimum_offset']))
             except queue.Empty:
                 pass
 

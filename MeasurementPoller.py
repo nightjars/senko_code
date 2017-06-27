@@ -164,12 +164,17 @@ class SavedMeasurementPoller(MeasurementPoller):
             data = json.load(f)
 
         init_time = None
+        last = 0
         for d in data:
             if not self.terminated:
                 if init_time is None:
                     init_time = calendar.timegm(time.gmtime()) - d['t']
                 d['t'] += init_time
+                if d['t'] > last:
+                    last = d['t']
+                    time.sleep(.5)
                 self.send_measurement(d)
+
 
 def save_measurements(filename = 'data_output', seconds_to_save = 20):
     q = queue.Queue()

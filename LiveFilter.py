@@ -21,7 +21,8 @@ class LiveFilter:
                                                          faults_data_file=DataStructures.configuration['faults_file'])
         self.worker_tracker = None
         self.data_router = DataRouter.DataRouter(self.config['sites'], self.config['faults'])
-        self.data_source = MeasurementPoller.RabbitMQPoller(self.data_router.input_data_queue)
+        #self.data_source = MeasurementPoller.RabbitMQPoller(self.data_router.input_data_queue)
+        self.data_source = MeasurementPoller.SavedMeasurementPoller(self.data_router.input_data_queue)
 
     def start(self):
         self.worker_tracker = WorkerTracker.WorkerTracker(self.data_router, self.config)

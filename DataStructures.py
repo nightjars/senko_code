@@ -8,7 +8,7 @@ import numpy as np
 configuration = {
     'kalman_url': 'http://www.panga.org/realtime/data/api/',  # Not used, maybe future?
     'kalman_url_en': '?q=5min&l=',  # Not used, maybe future?
-    'sites_file': './sta_offset2.d',
+    'sites_file': './sta_offset.d',
     'faults_file': './subfaults.d',
     'rabbit_mq': {'exchange_name': 'fastlane-nev-cov',
                   'host': 'pc96445.d.cwu.edu',
@@ -21,8 +21,6 @@ configuration = {
     'delay_timespan': 15,  # (seconds) Time to wait for laggard data
     'idle_sleep_time': 0.1,  # (seconds) Time to sleep to avoid busy wait loops
 
-    'minimum_offset': -1.,  # for validator
-
     'max_validator_threads': 4,
     'validator_queue_threshold': 1,
     'inverter_queue_threshold': 1,
@@ -32,6 +30,12 @@ configuration = {
 
     'kalman_default_lat': -120,
     'kalman_default_lon': 48,
+
+    # specified in config file:
+    'minimum_offset': 0.001,  #inverter config/validator/readonceconfig
+    'convergence': 45.,    # read once config
+    'eq_pause': 120.,
+    'eq_threshold': 1
 }
 
 inverter_configuration = {
@@ -83,11 +87,11 @@ def get_empty_kalman_state(sites, faults):
         'res': np.matrix([[0.], [0.], [0.]]),
         'override_flag': False,
         'sm_count': 0,
-        'smoothing': 60,
+        'smoothing': configuration['eq_pause'],
         'start_up': True,
         'eq_count': np.matrix([[0], [0], [0]]),
         'eq_flag': np.matrix([[False], [False], [False]]),
-        'eq_threshold': 0.001,
+        'eq_threshold': configuration['eq_threshold'],
         'tag': False,
         's_measure': [],
         'init_p': 0,
@@ -123,7 +127,6 @@ station = {
     'lat': '',
     'lon': '',
     'height': '',
-    'minimum_offset': '',
     'index': 0
 }
 
