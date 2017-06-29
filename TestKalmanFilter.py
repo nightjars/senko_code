@@ -9,7 +9,7 @@ import time
 import logging
 import queue
 import random
-
+import sys
 
 class TestKalmanFilter(unittest.TestCase):
     old_result = None
@@ -31,8 +31,14 @@ class TestKalmanFilter(unittest.TestCase):
 
                 #collect a few messages for a site
                 data_messages = []
-                while len(data_messages) < 500:
-                    msg = data_source.get()
+
+                while len(data_messages) < 400:
+                    if len(data_messages):
+                        msg = data_source.get()
+                    else:
+                        for x in range(18):
+                            msg = data_source.get()
+                    print (msg)
                     if len(data_messages):
                         # to simplify things, filter out all but a single site
                         if msg['gps_data']['site'] == \
@@ -51,6 +57,11 @@ class TestKalmanFilter(unittest.TestCase):
                 old_kal.InitFilter(data_messages[-1]['gps_data']['t'])
                 old_kal.Init_Filter(ipipe[0], opipe[0], cpipe[0])
                 old_kal_thread = threading.Thread(target=old_kal.FilterOn)
+                old_kal.Wait = DataStructures.configuration['mes_wait']
+                old_kal.smoothing = DataStructures.configuration['eq_pause']
+                old_kal.MaxOffset = DataStructures.configuration['max_offset']
+                old_kal.EQThres = DataStructures.configuration['eq_threshold']
+                old_kal.defR = DataStructures.configuration['minimum_offset']
                 old_kal_thread.start()
 
                 new_kal_in = queue.Queue()
@@ -88,8 +99,8 @@ class TestKalmanFilter(unittest.TestCase):
                             _, _, data = new_kal_out.get(timeout=5)
                             for _, val in data['kalman_output_data'].items():
                                 new_data_back.append(val)
-                    time.sleep(2)
-
+                    time.sleep(10)
+                sys.stdout.flush()
 
 
                 new_kal.terminated = True
@@ -115,4 +126,6 @@ class TestKalmanFilter(unittest.TestCase):
                                      "Kalman results for result {} key {} do not match.".format(idx, key))
 
 if __name__ == '__main__':
+    #a = TestKalmanFilter()
+    #a.setUp()
     unittest.main()

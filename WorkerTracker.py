@@ -2,7 +2,6 @@ import DataRouter
 import threading
 import time
 import DataStructures
-import ValidatorThread
 import Kalman
 import Inverter
 import logging
@@ -15,7 +14,6 @@ class WorkerTracker:
         self.inverter_threads = []
         self.router_threads = []
         self.reporter_threads = []
-        self.validator_threads = []
         self.router = router
         self.output_generator = None
         self.terminated = False
@@ -42,13 +40,11 @@ class WorkerTracker:
             counter += 1
             if counter % 100 == 0:
                 self.logger.info("Work status:")
-                self.logger.info("Queue sizes: {} {} {} {} {} {} {}".format(
+                self.logger.info("Queue sizes: {} {} {} {} {}".format(
                     self.router.input_data_queue.qsize(),
-                    self.router.data_validator_queue.qsize(),
                     self.router.time_grouping_queue.qsize(),
                     self.router.inverter_queue.qsize(),
                     self.router.kalman_start_queue.qsize(),
-                    self.router.kalman_initialize_queue.qsize(),
                     self.router.completed_inversion_queue.qsize()
                 ))
                 self.logger.info("Last sent data:  {}  Newest seen data:  {}".format(
@@ -60,14 +56,6 @@ class WorkerTracker:
                         locked_kalmans += 1
                 self.logger.info("{} of {} kalman states are locked.".format(locked_kalmans,
                                                                                      len(self.router.kalman_map)))
-
-            if self.router.data_validator_queue.qsize() >= DataStructures.configuration['validator_queue_threshold']:
-                if len(self.validator_threads) < DataStructures.configuration['max_validator_threads']:
-                    self.validator_threads.append(ValidatorThread.PrecalculatedOffsetValidator(
-                                                                   self.router.data_validator_queue,
-                                                                   self.router.kalman_initialize_queue,
-                                                                   self.config))
-                    self.validator_threads[-1].start()
 
             if self.router.kalman_start_queue.qsize() >= DataStructures.configuration['kalman_queue_threshold']:
                 if len(self.kalman_threads) < DataStructures.configuration['max_kalman_threads']:
@@ -101,10 +89,6 @@ class WorkerTracker:
         for thread in self.reporter_threads:
             thread.join()
         self.logger.info("Reporter threads shutdown")
-        for thread in self.validator_threads:
-            thread.terminated = True
-        for thread in self.validator_threads:
-            thread.join()
         self.logger.info("Validator threads shutdown")
         self.output_generator.terminated = True
         self.output_generator.join()

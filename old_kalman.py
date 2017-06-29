@@ -474,7 +474,7 @@ class Kalman:
             self.passupdateState()
 
     def updateMat(self):
-        #self.output_state(print, "Old Kal UM")
+        self.output_state(print, "Old Kal BUM")
         logging.info("Starting Kalman_updateMat at time: {}".format(dt.now()))
         if (self.prevTime != 0):
             self.delta_T = self.Time - self.prevTime
@@ -513,6 +513,7 @@ class Kalman:
             'iden = '
             print
             self.iden
+        self.output_state(print, "Old Kal AUM")
         self.calcRes()
 
     def calcRes(self):
@@ -530,7 +531,7 @@ class Kalman:
             self.determineState()
 
     def determineState(self):
-        #self.output_state(print, "Old Kal DS")
+        self.output_state(print, "Old Kal DS")
         logging.info("Starting Kalman_determineState at time: {}".format(dt.now()))
         # print self.SMCount
         # print self.smoothing
@@ -573,6 +574,7 @@ class Kalman:
                 self.endProc()
 
     def NormalMode(self):
+        self.output_state(print, "Old Kal NM")
         logging.info("Starting Kalman_NormalMode at time: {}".format(dt.now()))
         self.State = self.Phi * self.State + self.K * self.Res
         self.State2 = self.Phi * self.State2
@@ -610,7 +612,7 @@ class Kalman:
 
 
     def EQState(self):
-        #self.output_state(print, "Old Kal PEQS")
+        self.output_state(print, "Old Kal PEQS")
         logging.info("Starting Kalman_EQState at time: {}".format(dt.now()))
         if (self.EQPrint == True):
             print
@@ -676,6 +678,7 @@ class Kalman:
         #self.output_state(print, "Old Kal AEQS")
 
     def FalseEQState(self):
+        self.output_state(print, "Old Kal FEQS")
         if (self.EQPrint == True):
             print
             'Ending EQ test'
@@ -813,6 +816,7 @@ class Kalman:
         return self.Ready
 
     def output_state(self, output, message):
+        return
         disp_names = ['h', 'phi', 'state', 'state_2', 'offset', 'max_offset', 'iden', 'k', 'm', 'p',
                      'measurement_matrix', 'r', 'def_r', 'synth_n', 'synth_e', 'synth_v',
                      'i_state', 'i_state_2', 'q', 'res', 'override_flag', 'sm_count',

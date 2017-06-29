@@ -1,6 +1,5 @@
 import logging
-import sqlite3 as lite
-import sys
+import DataStructures
 
 
 def load_data_from_text_files(sites_data_file, faults_data_file):
@@ -18,8 +17,10 @@ def load_data_from_text_files(sites_data_file, faults_data_file):
             'offset': float(site[4]),
             'index': len(sites_dict)                            # store index for array sequencing
         }
-        if station['name'] not in sites_dict:
-            sites_dict[station['name']] = station
+
+        if True or station['offset'] >= DataStructures.configuration['minimum_offset']:
+            if station['name'] not in sites_dict:
+                sites_dict[station['name']] = station
 
     # Allow appending new stations once programming is running without having to iterate through
     # full list of sites by storing last-used-index

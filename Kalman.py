@@ -7,6 +7,7 @@ import numpy as np
 import logging
 import multiprocessing
 import queue
+import copy
 
 
 class KalmanThread(threading.Thread):
@@ -14,6 +15,7 @@ class KalmanThread(threading.Thread):
         self.logger = logging.getLogger(__name__)
         self.input_queue = input_queue
         self.output_queue = output_queue
+        self.outputs = None
         self.terminated = False
         self.force_no_delta_t = True
         ''' force_no_delta_t for unit tests to usefully compare output with other Kalman filter
@@ -47,6 +49,7 @@ class KalmanThread(threading.Thread):
                         kalman['data_set'][-1]['gps_data']['t'] > kalman['last_calculation']:
             gps_data = kalman['data_set'][-1]['gps_data']
             kalman['time'] = gps_data['t']
+            kalman['prev_time'] = gps_data['t']
             if gps_data['n'] != 0. or gps_data['e'] != 0. or gps_data['v'] != 0.:
                 cn = gps_data['cn']
                 cv = gps_data['cv']
@@ -76,15 +79,10 @@ class KalmanThread(threading.Thread):
                 kalman['last_calculation'] = kalman['data_set'][-1]['gps_data']['t']
 
     def update_matrix(self, kalman):
-        #self.output_state(kalman, print, "New Kal UM")
-        if kalman['last_calculation'] is not None:
-            if self.force_no_delta_t:
-                if kalman['override_flag']:
-                    kalman['delta_t'] = kalman['time'] - kalman['data_set'][-1]['gps_data']['t']
-                else:
-                    kalman['delta_t'] = 0  # make test pass
-            else:
-                kalman['delta_t'] = kalman['time'] - kalman['last_calculation']
+        self.output_state(kalman, print, "New Kal BUM")
+        if kalman['prev_time'] is not None:
+            kalman['delta_t'] = kalman['time'] - kalman['prev_time']
+            kalman['prev_time'] = kalman['time']
             kalman['last_calculation'] = kalman['time']
             kalman['q'] = np.matrix([[kalman['delta_t'], 0., 0.],
                                      [0., kalman['delta_t'], 0.],
@@ -93,6 +91,7 @@ class KalmanThread(threading.Thread):
         interm = (kalman['h'] * kalman['m'] * kalman['h'].T + kalman['r']).I
         kalman['k'] = kalman['m'] * kalman['h'].T * interm
         kalman['p'] = (kalman['iden'] - kalman['k'] * kalman['h']) * kalman['m']
+        self.output_state(kalman, print, "New Kal AUM")
         self.calc_res(kalman)
 
     def calc_res(self, kalman):
@@ -102,7 +101,7 @@ class KalmanThread(threading.Thread):
             self.determine_state(kalman)
 
     def determine_state(self, kalman):
-        #self.output_state(kalman, print, "New Kal DS")
+        self.output_state(kalman, print, "New Kal DS")
         if kalman['sm_count'] >= kalman['smoothing'] and kalman['start_up']:
             kalman['start_up'] = False
         if kalman['sm_count'] < kalman['smoothing']:
@@ -143,14 +142,16 @@ class KalmanThread(threading.Thread):
                 self.end_proc(kalman)
 
     def normal_mode(self, kalman):
+        self.output_state(kalman, print, "New Kal NM")
         kalman['state'] = kalman['phi'] * kalman['state'] + kalman['k'] * kalman['res']
         kalman['state_2'] = kalman['phi'] * kalman['state_2']
         kalman['tag'] = True if kalman['sm_count'] < kalman['smoothing'] and not kalman['start_up']   \
                         else False
+        self.outputs = copy.copy(kalman)
         #self.send stuff in here, not sure if needed
 
     def eq_state(self, kalman):
-        #self.output_state(kalman, print, "New Kal PEQS")
+        self.output_state(kalman, print, "New Kal PEQS")
         self.offset_reset(kalman)
         kalman['sm_count'] = 0
         kalman['s_measure'].append((kalman['data_set'][-1]['gps_data_timestamp'],
@@ -171,6 +172,7 @@ class KalmanThread(threading.Thread):
         #self.output_state(kalman, print, "New Kal AEQS")
 
     def false_eq_state(self, kalman):
+        self.output_state(kalman, print, "New Kal FEQS")
         kalman['write'] = True
         self.end_pass_state(kalman)
         kalman['override_flag'] = True
@@ -180,6 +182,7 @@ class KalmanThread(threading.Thread):
             kalman['time'], kalman['measurement_matrix'], kalman['r'] = x
             self.calc_res(kalman)
             self.normal_mode(kalman)
+            self.update_matrix(kalman)
         kalman['time'], kalman['measurement_matrix'], kalman['r'] = kalman['s_measure'][-1]
         kalman['s_measure'] = []
         kalman['offset'] = False
@@ -202,24 +205,25 @@ class KalmanThread(threading.Thread):
 
     def generate_output(self, kalman):
         data_set = kalman['data_set']
-        kalman_data_output = {kalman['site']['name']: {
-            'site': kalman['site']['name'],
-            'la': kalman['site']['lat'],
-            'lo': kalman['site']['lon'],
-            'mn': kalman['measurement_matrix'][0, 0],
-            'me': kalman['measurement_matrix'][1, 0],
-            'mv': kalman['measurement_matrix'][2, 0],
-            'kn': kalman['state'][0, 0],
-            'ke': kalman['state'][1, 0],
-            'kv': kalman['state'][2, 0],
-            'cn': kalman['r'][0, 0],
-            'ce': kalman['r'][1, 1],
-            'cv': kalman['r'][2, 2],
+        kalman_data_output = {self.outputs['site']['name']: {
+            'site': self.outputs['site']['name'],
+            'la': self.outputs['site']['lat'],
+            'lo': self.outputs['site']['lon'],
+            'mn': self.outputs['measurement_matrix'][0, 0],
+            'me': self.outputs['measurement_matrix'][1, 0],
+            'mv': self.outputs['measurement_matrix'][2, 0],
+            'kn': self.outputs['state'][0, 0],
+            'ke': self.outputs['state'][1, 0],
+            'kv': self.outputs['state'][2, 0],
+            'cn': self.outputs['r'][0, 0],
+            'ce': self.outputs['r'][1, 1],
+            'cv': self.outputs['r'][2, 2],
             'he': 0,  #kalman['site']['height'],  Old Kalman filter uses 0, should this be so?
-            'ta': kalman['tag'],
-            'st': kalman['start_up'],
-            'time': kalman['time'],
+            'ta': self.outputs['tag'],
+            'st': self.outputs['start_up'],
+            'time': self.outputs['time'],
         }}
+        self.outputs = None
         self.logger.debug("Kalman filter generating data for site {}, time {}".format(
             kalman['site']['name'], kalman['time']))
         kalman_out = DataStructures.get_grouped_inversion_queue_message(gps_measurement_data=
@@ -238,7 +242,7 @@ class KalmanThread(threading.Thread):
 
     def end_pass_state(self, kalman):
         kalman['state'] = kalman['i_state'] * 1.
-        kalman['state_2]'] = kalman['i_state_2'] * 1.
+        kalman['state_2'] = kalman['i_state_2'] * 1.
 
     def offset_reset(self, kalman):
         kalman['state_2'] = kalman['i_state'] + kalman['i_state_2']
@@ -251,12 +255,13 @@ class KalmanThread(threading.Thread):
         return max(kalman['eq_count'][0:3, 0])
 
     def output_state(self, kalman, output, message):
+        return
         disp_list = ['h', 'phi', 'state', 'state_2', 'offset', 'max_offset', 'iden', 'k', 'm', 'p',
                      'measurement_matrix', 'r', 'def_r', 'synth_n', 'synth_e', 'synth_v',
                      'i_state', 'i_state_2', 'q', 'res', 'override_flag', 'sm_count',
                      'smoothing', 'start_up', 'eq_count', 'eq_flag', 'eq_threshold', 'tag',
                      's_measure', 'init_p', 'reset_p', 'p_count', 'time', 'write', 'wait']
-        output("Kalman state dump: {}".format(message))
+        output("Kalman state dump: {}".format(message), flush=True)
         for state in disp_list:
             if state in ['smoothing', 'sm_count']:
                 output("{} {}".format(state, float(kalman[state])))

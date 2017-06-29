@@ -16,7 +16,7 @@ configuration = {
                   'password': 'ro',
                   'virtual_host': '/CWU-ppp'
                   },
-    'kalman_stale': 300,  # (seconds) Time before kalman states are wiped
+    'kalman_stale': 30,  # (seconds) Time before kalman states are wiped
     'group_timespan': 1,  # (seconds) Group batches of data in timespan
     'delay_timespan': 15,  # (seconds) Time to wait for laggard data
     'idle_sleep_time': 0.1,  # (seconds) Time to sleep to avoid busy wait loops
@@ -33,15 +33,20 @@ configuration = {
 
     # specified in config file:
     'minimum_offset': 0.001,  #inverter config/validator/readonceconfig
-    'convergence': 45.,    # read once config
-    'eq_pause': 120.,
-    'eq_threshold': 1
+    'convergence': 320.,    # read once config
+    'eq_pause': 10.,
+    'eq_threshold': 0.01,
+    'strike_slip': False,
+    'mes_wait': 2,
+    'max_offset': 4000,
+    'offset': False,
+    'min_r': 0.0001
 }
 
 inverter_configuration = {
     'sites': None,
     'faults': None,
-    'strike_slip': False,
+    'strike_slip': configuration['strike_slip'],
     'short_smoothing': True,
     'smoothing': True,
     'corner_fix': False,
@@ -59,12 +64,13 @@ def get_empty_kalman_state(sites, faults):
     delta_t = 1
     kalman_state = {
         'site': None,
+        'prev_time': None,
         'delta_t': delta_t,
         'h': np.matrix([[1., 0., 0.], [0., 1., 0.], [0., 0., 1.]]),
         'phi': np.matrix([[1., 0., 0.], [0., 1., 0.], [0., 0., 1.]]),
         'state': np.matrix([[0.], [0.], [0.]]),
         'state_2': np.matrix([[0.], [0.], [0.]]),
-        'max_offset': 25.0,
+        'max_offset': configuration['max_offset'],
         'iden': np.matrix([[1., 0., 0.], [0., 1., 0.], [0., 0., 1.]]),
         'k': np.matrix([[0., 0., 0.], [0., 0., 0.], [0., 0., 0.]]),
         'm': np.matrix([[0., 0., 0.], [0., 0., 0.], [0., 0., 0.]]),
@@ -76,8 +82,8 @@ def get_empty_kalman_state(sites, faults):
         'faults': faults,
         'measurement_matrix': np.matrix([[0.], [0.], [0.]]),
         'r': np.matrix([[0., 0., 0.], [0., 0., 0.], [0., 0., 0.]]),
-        'def_r': 0.0001,
-        'offset': False,
+        'def_r': configuration['min_r'],
+        'offset': configuration['offset'],
         'synth_n': 0.,
         'synth_e': 0.,
         'synth_v': 0.,
@@ -100,7 +106,7 @@ def get_empty_kalman_state(sites, faults):
         'time': 0,
         'write': '',
         'data_set': [],
-        'wait': 2
+        'wait': configuration['mes_wait']
     }
     return kalman_state
 

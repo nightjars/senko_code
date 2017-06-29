@@ -14,11 +14,9 @@ class DataRouter:
         self.conf = DataStructures.configuration
         self.inv_conf = DataStructures.inverter_configuration
         self.input_data_queue = queue.Queue()
-        self.data_validator_queue = queue.Queue()
         self.time_grouping_queue = queue.PriorityQueue()
         self.inverter_queue = queue.Queue()
         self.kalman_start_queue = queue.Queue()
-        self.kalman_initialize_queue = queue.Queue()
         self.completed_inversion_queue = queue.Queue()
 
         self.kalman_map = {}
@@ -42,7 +40,6 @@ class DataRouter:
         self.inv_conf['sites'] = self.sites
         self.inv_conf['faults'] = self.faults
         self.threads.append(threading.Thread(target=self.incoming_data_router))
-        self.threads.append(threading.Thread(target=self.kalman_initializer))
         self.threads.append(threading.Thread(target=self.time_grouper))
 
         for thread in self.threads:
@@ -80,20 +77,13 @@ class DataRouter:
                             kalman['lock'].release()
                             self.kalman_start_queue.put(kalman)
                 else:
-                    self.data_validator_queue.put(new_data)
+                    if new_data['gps_data']['site'] in self.sites:
+                        with self.kalman_lock:
+                            if not new_data['gps_data']['site'] in self.kalman_map:
+                                self.kalman_map[new_data['gps_data']['site']] = \
+                                    DataStructures.get_empty_kalman_state(self.sites, self.faults)
+                        self.input_data_queue.put(new_data)
                 self.newest_data_timestamp = max(new_data['gps_data_timestamp'], self.newest_data_timestamp)
-            except queue.Empty:
-                pass
-
-    def kalman_initializer(self):
-        while not self.terminated:
-            try:
-                new_data = self.kalman_initialize_queue.get(timeout=1)
-                with self.kalman_lock:
-                    if not new_data['gps_data']['site'] in self.kalman_map:
-                        self.kalman_map[new_data['gps_data']['site']] = \
-                            DataStructures.get_empty_kalman_state(self.sites, self.faults)
-                self.input_data_queue.put(new_data)
             except queue.Empty:
                 pass
 
