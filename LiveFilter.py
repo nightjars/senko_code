@@ -17,15 +17,14 @@ class LiveFilter:
         logging.basicConfig(level=logging.INFO, format='%(relativeCreated)6d %(threadName)s %(message)s')
 
         self.logger.info("LiveFilter starting.")
-        self.config = DataLoader.load_data_from_text_files(sites_data_file=DataStructures.configuration['sites_file'],
-                                                         faults_data_file=DataStructures.configuration['faults_file'])
+        DataLoader.load_data_from_text_files()
         self.worker_tracker = None
-        self.data_router = DataRouter.DataRouter(self.config['sites'], self.config['faults'])
+        self.data_router = DataRouter.DataRouter()
         #self.data_source = MeasurementPoller.RabbitMQPoller(self.data_router.input_data_queue)
         self.data_source = MeasurementPoller.SavedMeasurementPoller(self.data_router.input_data_queue)
 
     def start(self):
-        self.worker_tracker = WorkerTracker.WorkerTracker(self.data_router, self.config)
+        self.worker_tracker = WorkerTracker.WorkerTracker(self.data_router)
         self.data_source.start()
 
     def stop(self):

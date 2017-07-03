@@ -18,10 +18,9 @@ class OutputGeneratorThread(threading.Thread):
     def run(self):
         while not self.terminated:
             try:
-                completed_inversion = self.input_queue.get(timeout=1)
+                (output_data, model, tag) = self.input_queue.get(timeout=1)
 
                 self.completed_data_count += 1
-                output_data = completed_inversion['inverter_output_data']
                 data_out = []
                 for d in output_data['data']:
                     if d[4]:
@@ -30,8 +29,8 @@ class OutputGeneratorThread(threading.Thread):
                         data_out.append([d[0], 0., 0.])
                 output = {
                     't': float(output_data['time']),
-                    'tag': 'not implemented',
-                    'model': 'not implemented',
+                    'tag': tag,
+                    'model': model,
                     'result': json.dumps({
                         'estimates': [[x[0], x[7], x[8]] for x in output_data['estimates']],
                         'slip': [x[8] for x in output_data['slip']],

@@ -23,19 +23,18 @@ class InverterThread(threading.Thread):
         while not self.terminated:
             try:
                 (time_stamp, kalman_data, conf) = self.input_queue.get(timeout=1)
-                self.logger.debug("Got a group for time {} with {} kalman sets in it".
-                                  format(time_stamp, len(kalman_data['kalman_output_data'])))
-                kalman_data = DataStructures.get_grouped_inversion_queue_message(prev_message=kalman_data,
-                                                                                 inverter_begin=True)
+                self.logger.info("Inverter got a group for time {} with {} kalman sets in it".
+                                  format(time_stamp, len(kalman_data)))
 
-                offset, sub_inputs, smooth_mat, mask = InverterConfiguration.get_config(conf)
-                offset = np.copy(offset)
-                sub_inputs = np.copy(sub_inputs)
-                mask = np.copy(mask)
+                inv_conf = conf['inverter_configuration']
+                offset = np.copy(inv_conf['offset'])
+                sub_inputs = np.copy(inv_conf['sub_inputs'])
+                mask = np.copy(inv_conf['mask'])
+                smooth_mat = inv_conf['smooth_mat']
                 sites = conf['sites']
 
                 site_correlate = []
-                for site, kalman_output in kalman_data['kalman_output_data'].items():
+                for site, kalman_output in kalman_data.items():
                     site_idx = sites[site]['index']
                     site_correlate.append((site_idx, sites[site]))
                     mask[site_idx * 3: site_idx * 3 + 3, 0] = 1
@@ -57,15 +56,12 @@ class InverterThread(threading.Thread):
 
                 calc_offset = sub_inputs.dot(solution)
 
-                output = self.generate_output(solution, kalman_data['kalman_output_data'], site_correlate,
+                output = self.generate_output(solution, kalman_data, site_correlate,
                                               calc_offset, time_stamp, conf)
 
-                kalman_data = DataStructures.get_grouped_inversion_queue_message(prev_message=kalman_data,
-                                                                                 inverter_output_data=output)
-                self.output_queue.put(kalman_data)
+                self.output_queue.put((output, conf['model'], conf['tag']))
             except queue.Empty:
                 pass
-
 
     def generate_output(self, solution, kalman_data, correlate, calc_offset, time_stamp, conf):
         faults = conf['faults']
@@ -147,9 +143,9 @@ class InverterThread(threading.Thread):
         magnitude_str = "{:.2E}".format(magnitude)
 
         output = {
-            'time': time_stamp[-1],
+            'time': time_stamp,
             'data': site_data,
-            'label': "label and model to appear" + dt.utcfromtimestamp(float(time_stamp[-1])).strftime("%Y-%m-%d %H:%M:%S %Z"),
+            'label': "label and model to appear" + dt.utcfromtimestamp(float(time_stamp)).strftime("%Y-%m-%d %H:%M:%S %Z"),
             'slip': slip,
             'estimates': estimates,
             'Moment': magnitude_str,
@@ -160,81 +156,70 @@ class InverterThread(threading.Thread):
     def stop(self):
         self.terminated = True
 
-
-class InverterConfiguration:
-    inverter_config = None
-    generator_lock = threading.Lock()
+def config_generator(conf):
     logger = logging.getLogger(__name__)
-    cache_validator_hash = None
+    start_time = time.time()
+    logger.info("Starting inverter config processing for {}.".format(conf['model']))
+    offset_count = 3
+    subfault_wid = int(conf['faults']['width'])
+    subfault_len = int(conf['faults']['length'])
+    conf_inv = conf['inverter_configuration']
+    strike_slip = conf_inv['strike_slip']
+    smoothing = conf_inv['smoothing']
+    corner_fix = conf_inv['corner_fix']
+    short_smoothing = conf_inv['short_smoothing']
 
-    @staticmethod
-    def get_config(conf):
-        # to do: add logic to compare and update when sites/faults changes
-        with InverterConfiguration.generator_lock:
-            if InverterConfiguration.inverter_config is None:
-                InverterConfiguration.inverter_config = InverterConfiguration.config_generator(conf)
-        return InverterConfiguration.inverter_config
+    offset = np.zeros((len(conf['sites']) * offset_count + len(conf['faults']['subfault_list'])))
+    mask = np.zeros((len(conf['sites']) * offset_count + len(conf['faults']['subfault_list']), 1))
 
-    @staticmethod
-    def config_generator(conf):
-        start_time = time.time()
-        InverterConfiguration.logger.info("Starting inverter config processing.")
-        offset_count = conf['offsets_per_site']
-        subfault_wid = int(conf['faults']['width'])
-        subfault_len = int(conf['faults']['length'])
-        strike_slip = conf['strike_slip']
-        smoothing = conf['smoothing']
-        corner_fix = conf['corner_fix']
-        short_smoothing = conf['short_smoothing']
+    sub_inputs = np.zeros((len(conf['sites']) * offset_count, len(conf['faults']['subfault_list'])))
+    smooth_mat = np.zeros((len(conf['faults']['subfault_list']), len(conf['faults']['subfault_list'])))
 
-        offset = np.zeros((len(conf['sites']) * offset_count + len(conf['faults']['subfault_list'])))
-        mask = np.zeros((len(conf['sites']) * offset_count + len(conf['faults']['subfault_list']), 1))
+    for site_key, site in conf['sites'].items():
+        for fault_idx, fault in enumerate(conf['faults']['subfault_list']):
+            convergence = conf['convergence']
+            rake = fault[3] - convergence
+            rake += 180
+            if rake < 0:
+                rake += 360
+            if rake > 360:
+                rake -= 360
+            result = ok.dc3d(fault[0], fault[1], fault[2], fault[3], fault[4], rake, fault[5], fault[6],
+                             1, 0, site['lat'], site['lon'], 0)
+            sub_inputs[site['index']*3, fault_idx] = float(result[0])
+            sub_inputs[site['index']*3+1, fault_idx] = float(result[1])
+            sub_inputs[site['index']*3+2, fault_idx] = float(result[2])
 
-        sub_inputs = np.zeros((len(conf['sites']) * offset_count, len(conf['faults']['subfault_list'])))
-        smooth_mat = np.zeros((len(conf['faults']['subfault_list']), len(conf['faults']['subfault_list'])))
+    if smoothing:
+        if short_smoothing:
+            for idx, fault in enumerate(conf['faults']['subfault_list']):
+                smooth_mat[idx, idx] = 0
+                if idx > subfault_len:
+                    smooth_mat[idx, idx] = -1
+                    smooth_mat[idx - subfault_len][idx] = 1
+                    smooth_mat[idx, idx - subfault_len] = 1
+                if idx < subfault_len * (subfault_wid - 1):
+                    smooth_mat[idx, idx] -= 1
+                    smooth_mat[idx + subfault_len, idx] = 1
+                    smooth_mat[idx, idx + subfault_len] = 1
+                if idx % subfault_len != 0:
+                    smooth_mat[idx, idx] -= 1
+                    smooth_mat[idx - 1, idx] = 1
+                    smooth_mat[idx, idx-1] = 1
+                if idx % subfault_len != subfault_len - 1:
+                    smooth_mat[idx, idx] -= 1
+                    smooth_mat[idx + 1, idx] = 1
+                    smooth_mat[idx, idx + 1] = 1
+        else:
+            raise NotImplementedError
 
-        for site_key, site in conf['sites'].items():
-            for fault_idx, fault in enumerate(conf['faults']['subfault_list']):
-                convergence = DataStructures.configuration['convergence']
-                rake = fault[3] - convergence
-                rake += 180
-                if rake < 0:
-                    rake += 360
-                if rake > 360:
-                    rake -= 360
-                result = ok.dc3d(fault[0], fault[1], fault[2], fault[3], fault[4], rake, fault[5], fault[6],
-                                 1, 0, site['lat'], site['lon'], 0)
-                sub_inputs[site['index']*3, fault_idx] = float(result[0])
-                sub_inputs[site['index']*3+1, fault_idx] = float(result[1])
-                sub_inputs[site['index']*3+2, fault_idx] = float(result[2])
-
-        if smoothing:
-            if short_smoothing:
-                for idx, fault in enumerate(conf['faults']['subfault_list']):
-                    smooth_mat[idx, idx] = 0
-                    if idx > subfault_len:
-                        smooth_mat[idx, idx] = -1
-                        smooth_mat[idx - subfault_len][idx] = 1
-                        smooth_mat[idx, idx - subfault_len] = 1
-                    if idx < subfault_len * (subfault_wid - 1):
-                        smooth_mat[idx, idx] -= 1
-                        smooth_mat[idx + subfault_len, idx] = 1
-                        smooth_mat[idx, idx + subfault_len] = 1
-                    if idx % subfault_len != 0:
-                        smooth_mat[idx, idx] -= 1
-                        smooth_mat[idx - 1, idx] = 1
-                        smooth_mat[idx, idx-1] = 1
-                    if idx % subfault_len != subfault_len - 1:
-                        smooth_mat[idx, idx] -= 1
-                        smooth_mat[idx + 1, idx] = 1
-                        smooth_mat[idx, idx + 1] = 1
-            else:
-                raise NotImplementedError
-
-            if corner_fix:
-                for x in range(len(conf['faults']['subfault_list'])):
-                    smooth_mat[x, x] = -4
-        mask[-len(conf['faults']['subfault_list']):,0] = 1
-        elapsed_time = time.time() - start_time
-        InverterConfiguration.logger.info("Finished inverter config processing in {} seconds.".format(elapsed_time))
-        return offset, sub_inputs, smooth_mat, mask
+        if corner_fix:
+            for x in range(len(conf['faults']['subfault_list'])):
+                smooth_mat[x, x] = -4
+    mask[-len(conf['faults']['subfault_list']):,0] = 1
+    elapsed_time = time.time() - start_time
+    logger.info("Finished inverter config processing for {} in {} seconds.".format(conf['model'], elapsed_time))
+    conf_inv['offset'] = offset
+    conf_inv['sub_inputs'] = sub_inputs
+    conf_inv['smooth_mat'] = smooth_mat
+    conf_inv['mask'] = mask

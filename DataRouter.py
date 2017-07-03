@@ -9,26 +9,25 @@ import logging
 
 class DataRouter:
     # deal with the lifecycle of data going through the system
-    def __init__(self, sites, faults):
+    def __init__(self):
         self.logger = logging.getLogger(__name__)
         self.conf = DataStructures.configuration
-        self.inv_conf = DataStructures.inverter_configuration
         self.input_data_queue = queue.Queue()
-        self.time_grouping_queue = queue.PriorityQueue()
+        self.time_grouping_queue = queue.Queue()
         self.inverter_queue = queue.Queue()
         self.kalman_start_queue = queue.Queue()
         self.completed_inversion_queue = queue.Queue()
 
-        self.kalman_map = {}
-        self.kalman_lock = threading.Lock()
+        self.inversion_runs = DataStructures.inversion_runs
         self.newest_data_timestamp = 0
         self.last_sent_data_timestamp = None
         self.completed_data_count = 0
         self.terminated = False
 
-        self.sites = sites
-        self.faults = faults
         self.data_num = 0
+
+        self.time_grouped_messages = {}
+        self.initial_time_stamp = None
 
         self.threads = []
 
@@ -37,8 +36,6 @@ class DataRouter:
 
     def router_start(self):
         self.logger.info("Data router starting.")
-        self.inv_conf['sites'] = self.sites
-        self.inv_conf['faults'] = self.faults
         self.threads.append(threading.Thread(target=self.incoming_data_router))
         self.threads.append(threading.Thread(target=self.time_grouper))
 
@@ -51,44 +48,70 @@ class DataRouter:
             try:
                 new_data = self.input_data_queue.get(timeout=1)
                 self.data_num += 1
-                if new_data['gps_data']['site'] in self.kalman_map:
-                    kalman = self.kalman_map[new_data['gps_data']['site']]
-                    measure_time = new_data['gps_data_timestamp']
+                if self.initial_time_stamp is None:
+                    self.initial_time_stamp = new_data['t']
+                for run in self.inversion_runs:
+                    if new_data['site'] not in run['filters']:
+                        if new_data['site'] in run['sites']:
+                            if not new_data['site'] in run['filters']:
+                                run['filters'][new_data['site']] = \
+                                    DataStructures.get_empty_kalman_state(run)
+                    if new_data['site'] in run['filters']:
+                        kalman = run['filters'][new_data['site']]
+                        measure_time = new_data['t']
 
-                    if kalman['last_calculation'] is not None and \
-                                measure_time - DataStructures.configuration['kalman_stale'] > kalman['last_calculation']:
-                        del (self.kalman_map[new_data['gps_data']['site']])
-                        # Kalman is stale, delete it and re-process this message
-                        self.input_data_queue.put(new_data)
-                    else:
-                        # If there's in entry in the kalman map, the kalman filter is in one of two states:
-                        # activity processing, in which case add the work to the filter's queue.  If not actively
-                        # processing, either re-start the kalman filter or create a new one, based on if the
-                        # data has passed its defined expiration date
+                        if kalman['last_calculation'] is not None and \
+                                    measure_time - DataStructures.configuration['kalman_stale'] > kalman['last_calculation']:
+                            del (run['filters'][new_data['site']])
+                        else:
+                            # If there's in entry in the kalman map, the kalman filter is in one of two states:
+                            # activity processing, in which case add the work to the filter's queue.  If not actively
+                            # processing, either re-start the kalman filter or create a new one, based on if the
+                            # data has passed its defined expiration date
 
+                            kalman['measurement_queue'].put((measure_time, self.data_num, new_data))
 
-                        kalman['measurement_queue'].put((measure_time, self.data_num,
-                                                         DataStructures.get_gps_measurement_queue_message(new_data,
-                                                         kalman_verify_step=True,kalman_filter_step=True)))
-
-                        # lock will be set if a thread is currently working on this data
-                        if kalman['lock'].acquire(False):
-                            # Lock acquired, nothing is processing this data, put into start queue
-                            kalman['lock'].release()
-                            self.kalman_start_queue.put(kalman)
-                else:
-                    if new_data['gps_data']['site'] in self.sites:
-                        with self.kalman_lock:
-                            if not new_data['gps_data']['site'] in self.kalman_map:
-                                self.kalman_map[new_data['gps_data']['site']] = \
-                                    DataStructures.get_empty_kalman_state(self.sites, self.faults)
-                        self.input_data_queue.put(new_data)
-                self.newest_data_timestamp = max(new_data['gps_data_timestamp'], self.newest_data_timestamp)
+                            # lock will be set if a thread is currently working on this data
+                            if kalman['lock'].acquire(False):
+                                # Lock acquired, nothing is processing this data, put into start queue
+                                kalman['lock'].release()
+                                self.kalman_start_queue.put(kalman)
+                    self.newest_data_timestamp = max(new_data['t'], self.newest_data_timestamp)
             except queue.Empty:
                 pass
 
     def time_grouper(self):
+        run_data = {}
+        for run in DataStructures.inversion_runs:
+            run_data[run['model']] = run
+
         while not self.terminated:
+            (time, data, run) = self.time_grouping_queue.get()
+            if self.last_sent_data_timestamp is None:
+                self.last_sent_data_timestamp = self.initial_time_stamp - 1
+            if time > self.last_sent_data_timestamp:
+                if time not in self.time_grouped_messages:
+                    self.time_grouped_messages[time] = {}
+                if run['model'] in self.time_grouped_messages[time]:
+                    self.time_grouped_messages[time][run['model']][data['site']] = data
+                else:
+                    self.time_grouped_messages[time][run['model']] = {data['site']: data}
+            if self.newest_data_timestamp - self.conf['delay_timespan'] > self.last_sent_data_timestamp:
+                self.last_sent_data_timestamp += 1
+                try:
+                    for model, measurements in self.time_grouped_messages[self.last_sent_data_timestamp].items():
+                        data_to_send = measurements
+                        self.inverter_queue.put((self.last_sent_data_timestamp, data_to_send, run_data[model]))
+                    self.logger.info("Sent timegroup {} to inverter queue.".format(self.last_sent_data_timestamp))
+                    del self.time_grouped_messages[time]
+                except KeyError:
+                    pass
+
+
+
+'''        
+    def time_grouper(self):
+        while not self.terminated:            
             Time.sleep(.1)
             if self.last_sent_data_timestamp is not None:
                 oldest_good_data = self.last_sent_data_timestamp + 1
@@ -135,3 +158,4 @@ class DataRouter:
                     self.logger.debug("No data to sent to inverter for timegroup {}".format(
                         oldest_good_data))
                     self.last_sent_data_timestamp += 1
+'''

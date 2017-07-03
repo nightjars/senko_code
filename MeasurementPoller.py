@@ -14,15 +14,12 @@ class MeasurementPoller:
     def __init__(self, output_queue):
         self.output_queue = output_queue
         self.terminated = False
-        self.sequence_number = 0
 
-        self.config = DataLoader.load_data_from_text_files(sites_data_file=DataStructures.configuration['sites_file'],
-                                                           faults_data_file=DataStructures.configuration['faults_file'])
+        #self.config = DataLoader.load_data_from_text_files(sites_data_file=DataStructures.configuration['sites_file'],
+        #                                                   faults_data_file=DataStructures.configuration['faults_file'])
 
     def send_measurement(self, measurement):
-        self.output_queue.put(DataStructures.get_gps_measurement_queue_message(gps_data=measurement,
-                                                               gps_data_sequence_number=self.sequence_number))
-        self.sequence_number += 1
+        self.output_queue.put(measurement)
 
     def start(self):
         pass
@@ -172,7 +169,7 @@ class SavedMeasurementPoller(MeasurementPoller):
                 d['t'] += init_time
                 if d['t'] > last:
                     last = d['t']
-                    time.sleep(.05)
+                    time.sleep(.3)
                 self.send_measurement(d)
 
 
