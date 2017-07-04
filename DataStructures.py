@@ -31,8 +31,8 @@ configuration = {
 
 inversion_runs = [
     {
-        'sites_file': './sta_offset.d',
-        'faults_file': './subfaults.d',
+        'sites_file': './SA_offset.d',
+        'faults_file': './SA_faults.d',
         'sites': None,
         'faults': None,
         'filters': None,
