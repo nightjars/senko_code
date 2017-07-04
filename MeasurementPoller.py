@@ -169,7 +169,7 @@ class SavedMeasurementPoller(MeasurementPoller):
                 d['t'] += init_time
                 if d['t'] > last:
                     last = d['t']
-                    time.sleep(.3)
+                    time.sleep(.8)
                 self.send_measurement(d)
 
 

@@ -97,18 +97,51 @@ inversion_runs = [
         }
     },
     {
-        'sites_file': './CAS_offset.d',
-        'faults_file': './CAS_faults.d',
+        'sites_file': './MAT_offset.d',
+        'faults_file': './MAT_faults.d',
         'sites': None,
         'faults': None,
         'filters': None,
-        'model': '2ValidationTestCAS',
+        'model': 'ValidationTestMAT',
         'label': 'Refactor Version',
         'tag': 'Test',
         'minimum_offset': 0.001,  # inverter config/validator/readonceconfig
         'convergence': 320.,  # read once config
         'eq_pause': 120.,
         'eq_threshold': 1.,
+        'strike_slip': False,
+        'mes_wait': 2,
+        'max_offset': 100,
+        'offset': False,
+        'min_r': 0.0001,
+        'float_equality': 1e-9,
+        'inverter_configuration': {
+            'strike_slip': None,
+            'short_smoothing': True,
+            'smoothing': True,
+            'corner_fix': False,
+            'offsets_per_site': 3,
+            'subfault_len': 60.,
+            'subfault_wid': 30.,
+            'offset': None,
+            'sub_inputs': None,
+            'smooth_mat': None,
+            'mask': None
+        }
+    },
+    {
+        'sites_file': './NAZ_offset.d',
+        'faults_file': './NAZ_faults.d',
+        'sites': None,
+        'faults': None,
+        'filters': None,
+        'model': 'ValidationTestNAZ',
+        'label': 'Refactor Version',
+        'tag': 'Test',
+        'minimum_offset': 0.001,  # inverter config/validator/readonceconfig
+        'convergence': 320.,  # read once config
+        'eq_pause': 120.,
+        'eq_threshold': .1,
         'strike_slip': False,
         'mes_wait': 2,
         'max_offset': 100,
