@@ -23,8 +23,8 @@ class InverterThread(threading.Thread):
         while not self.terminated:
             try:
                 (time_stamp, kalman_data, conf) = self.input_queue.get(timeout=1)
-                self.logger.info("Inverter got a group for time {} with {} kalman sets in it".
-                                  format(time_stamp, len(kalman_data)))
+                self.logger.info("Inverter got data for model {},  time {} with {} sites in it".
+                                  format(conf['model'], time_stamp, len(kalman_data)))
 
                 inv_conf = conf['inverter_configuration']
                 offset = np.copy(inv_conf['offset'])
