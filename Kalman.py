@@ -33,11 +33,12 @@ class KalmanThread(threading.Thread):
                     while not self.terminated and not kalman['measurement_queue'].empty():
                         try:
                             (_, _, measurement) = kalman['measurement_queue'].get(timeout=1)
-                            kalman['data_set'].append(DataStructures.get_gps_measurement_queue_message(measurement,
-                                                        kalman_filter_step=True))
+                            kalman['data_set'].append(measurement)
                             self.process_measurement(kalman)
                         except queue.Empty:
                             pass
+                        except:
+                            self.legger.error("Error processing measurement: {}, {}".format(kalman, measurement))
                     kalman['lock'].release()
                     self.logger.debug("{} finished processing {}".format(self, kalman['site']))
 
@@ -45,12 +46,12 @@ class KalmanThread(threading.Thread):
                 pass
 
     def process_measurement(self, kalman):
-        if kalman['last_calculation'] is None or \
-                        kalman['data_set'][-1]['gps_data']['t'] > kalman['last_calculation']:
-            gps_data = kalman['data_set'][-1]['gps_data']
+        if kalman['last_calculation'] is None or kalman['data_set'][-1]['t'] > kalman['last_calculation']:
+            gps_data = kalman['data_set'][-1]
             kalman['time'] = gps_data['t']
             kalman['prev_time'] = gps_data['t']
-            if gps_data['n'] != 0. or gps_data['e'] != 0. or gps_data['v'] != 0.:
+            if gps_data['n'] != 0. or gps_data['e'] != 0. or gps_data['v'] != 0.:                
+                kalman['temp_kill'] = 0     # remove when kalman bug is fixed
                 cn = gps_data['cn']
                 cv = gps_data['cv']
                 ce = gps_data['ce']
@@ -64,7 +65,7 @@ class KalmanThread(threading.Thread):
                 if np.abs(res[0, 0]) < kalman['max_offset'] and np.abs(res[1, 0]) < kalman['max_offset'] and   \
                             np.abs(res[2, 0]) < kalman['max_offset']:
                     if kalman['last_calculation'] is None:
-                        kalman['site'] = kalman['sites'][kalman['data_set'][-1]['gps_data']['site']]
+                        kalman['site'] = kalman['sites'][kalman['data_set'][-1]['site']]
                         kalman['state_2'] = measure_matrix * 1.0
                     else:
                         kalman['measurement_matrix'] = measure_matrix
@@ -76,7 +77,14 @@ class KalmanThread(threading.Thread):
                             self.pass_update_state(kalman)
                         else:
                             self.update_matrix(kalman)
-                kalman['last_calculation'] = kalman['data_set'][-1]['gps_data']['t']
+                else:
+                    kalman['data_set'] = kalman['data_set'][-1]
+                    #temporary logic to deal with jammed filters - see datarouter.py for details
+                    kalman['temp_kill'] += 1
+
+                kalman['last_calculation'] = kalman['data_set'][-1]['t']
+        else:
+            self.logger.info("{} Kalman filter ignoring old data: {}".format(kalman['site'], kalman['data_set'][-1]))
 
     def update_matrix(self, kalman):
         self.output_state(kalman, print, "New Kal BUM")
@@ -154,7 +162,7 @@ class KalmanThread(threading.Thread):
         self.output_state(kalman, print, "New Kal PEQS")
         self.offset_reset(kalman)
         kalman['sm_count'] = 0
-        kalman['s_measure'].append((kalman['data_set'][-1]['gps_data_timestamp'],
+        kalman['s_measure'].append((kalman['data_set'][-1]['t'],
                                     kalman['measurement_matrix'], kalman['r']))
         kalman['init_p'] = kalman['p'][0, 0]
         kalman['p'] = kalman['reset_p'] * 1.0
@@ -176,7 +184,7 @@ class KalmanThread(threading.Thread):
         kalman['write'] = True
         self.end_pass_state(kalman)
         kalman['override_flag'] = True
-        kalman['s_measure'].append((kalman['data_set'][-1]['gps_data_timestamp'],
+        kalman['s_measure'].append((kalman['data_set'][-1]['t'],
                                     kalman['measurement_matrix'], kalman['r']))
         for x in kalman['s_measure'][:-1]:
             kalman['time'], kalman['measurement_matrix'], kalman['r'] = x
@@ -198,14 +206,14 @@ class KalmanThread(threading.Thread):
             kalman['sm_count'] += 1
             self.normal_mode(kalman)
         else:
-            kalman['s_measure'].append((kalman['data_set'][-1]['gps_data_timestamp'],
+            kalman['s_measure'].append((kalman['data_set'][-1]['t'],
                                         kalman['measurement_matrix'], kalman['r']))
         self.generate_output(kalman)
         kalman['data_set'] = [kalman['data_set'][-1]]
 
     def generate_output(self, kalman):
         data_set = kalman['data_set']
-        kalman_data_output = {self.outputs['site']['name']: {
+        kalman_data_output = {
             'site': self.outputs['site']['name'],
             'la': self.outputs['site']['lat'],
             'lo': self.outputs['site']['lon'],
@@ -222,14 +230,11 @@ class KalmanThread(threading.Thread):
             'ta': self.outputs['tag'],
             'st': self.outputs['start_up'],
             'time': self.outputs['time'],
-        }}
-        self.outputs = None
+        }
         self.logger.debug("Kalman filter generating data for site {}, time {}".format(
             kalman['site']['name'], kalman['time']))
-        kalman_out = DataStructures.get_grouped_inversion_queue_message(gps_measurement_data=
-                                                                        {kalman['site']['name']: data_set},
-                                                                        kalman_output_data=kalman_data_output)
-        self.output_queue.put((kalman['time'], kalman_out['sequence_number'], kalman_out))
+        self.output_queue.put((self.outputs['time'], kalman_data_output, kalman['run']))
+        self.outputs = None
 
     def pass_state_start(self, kalman):
         kalman['i_state'] = kalman['state'] * 1.

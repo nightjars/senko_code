@@ -33,9 +33,9 @@ class InverterValidator(threading.Thread):
     @staticmethod
     def message_callback(msg):
         old_inverter_msg = json.loads(msg.body.decode("utf-8"))
-        if 'TestSA' in old_inverter_msg['model']:
+        if 'TestCAS' in old_inverter_msg['model']:
             InverterValidator.me.new_inverter_data(old_inverter_msg)
-        elif 'SanA' in old_inverter_msg['model']:
+        elif 'Cascadia' in old_inverter_msg['model']:
             InverterValidator.old_data[old_inverter_msg['t']] = old_inverter_msg
             #print ("Data from old")
 
@@ -104,6 +104,28 @@ class InverterValidator(threading.Thread):
                 diff_slip += float(slip) - float(new['slip'][idx])
                 tot_slip += float(slip)
  
+        if old['Mw'] != new['Mw']:
+            with open("CAS-diff", 'a') as f:
+                olddict = {}
+                newdict = {}
+                for d in old['data']:
+                    olddict[d[0]] = d
+                for d in new['data']:
+                    if d[0] in olddict:
+                        if olddict[d[0]] == d:
+                            del(olddict[d[0]])
+                        else:
+                            newdict[d[0]] = d
+                    else:
+                        newdict[d[0]] = d
+                f.write("Time: {}\n".format(int(old['t'])))
+                f.write("Old\n")
+                json.dump(olddict, f)
+                f.write("New\n")
+                json.dump(newdict, f)
+                f.write("\n")
+
+
         #print (slip_len)
         #print (len(old['slip']))
         #print (len(new['slip']))

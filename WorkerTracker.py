@@ -8,7 +8,7 @@ import logging
 import OutputGenerator
 
 class WorkerTracker:
-    def __init__(self, router, config):
+    def __init__(self, router):
         self.logger = logging.getLogger(__name__)
         self.kalman_threads = []
         self.inverter_threads = []
@@ -19,7 +19,6 @@ class WorkerTracker:
         self.terminated = False
         self.tracker_thread = threading.Thread(target=self.run, args=())
         self.tracker_thread.start()
-        self.config = config
 
     def run(self):
         self.router_threads.append(threading.Thread(target=self.router.router_start, args=()))
@@ -28,12 +27,6 @@ class WorkerTracker:
         self.output_generator = OutputGenerator.OutputGeneratorThread(
             self.router.completed_inversion_queue)
         self.output_generator.start()
-
-        # find a better place for this
-        # this will do the math needed for setting up sites for the inverter
-        ci = threading.Thread(target=Inverter.InverterConfiguration.get_config,
-                              kwargs={'conf': self.router.inv_conf})
-        ci.start()
 
         counter = 0
         while not self.terminated:
@@ -50,12 +43,6 @@ class WorkerTracker:
                 self.logger.info("Last sent data:  {}  Newest seen data:  {}".format(
                       self.router.last_sent_data_timestamp,
                       self.router.newest_data_timestamp))
-                locked_kalmans = 0
-                for _, value in self.router.kalman_map.items():
-                    if value['lock'].locked():
-                        locked_kalmans += 1
-                self.logger.info("{} of {} kalman states are locked.".format(locked_kalmans,
-                                                                                     len(self.router.kalman_map)))
 
             if self.router.kalman_start_queue.qsize() >= DataStructures.configuration['kalman_queue_threshold']:
                 if len(self.kalman_threads) < DataStructures.configuration['max_kalman_threads']:
