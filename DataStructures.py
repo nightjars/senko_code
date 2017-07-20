@@ -8,20 +8,23 @@ import numpy as np
 configuration = {
     'kalman_url': 'http://www.panga.org/realtime/data/api/',  # Not used, maybe future?
     'kalman_url_en': '?q=5min&l=',  # Not used, maybe future?
-    'rabbit_mq': {'exchange_name': 'fastlane-nev-cov',
+    'rabbit_mq_input': {'exchange_name': 'fastlane-nev-cov',
                   'host': 'pc96445.d.cwu.edu',
                   'userid': 'panga_ro',
                   'password': 'ro',
-                  'virtual_host': '/CWU-ppp'
-                  },
+                  'virtual_host': '/CWU-ppp'},
+    'rabbit_mq_output': {'exchange_name': 'slip-inversion2',
+                         'host': 'pc96225.d.cwu.edu',
+                         'port': 5672,
+                         'userid': 'nif',
+                         'virtual_host': '/rtgps-products',
+                         'password': 'nars0add',
+                         'model': 'Test'},
     'kalman_stale': 30,  # (seconds) Time before kalman states are wiped
     'group_timespan': 1,  # (seconds) Group batches of data in timespan
     'delay_timespan': 15,  # (seconds) Time to wait for laggard data
     'idle_sleep_time': 0.1,  # (seconds) Time to sleep to avoid busy wait loops
 
-    'validator_queue_threshold': 1,
-    'inverter_queue_threshold': 1,
-    'kalman_queue_threshold': 1,
     'max_kalman_threads': 30,
     'max_inverter_threads': 1,
 

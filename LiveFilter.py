@@ -6,8 +6,7 @@ import DataStructures
 import time
 import threading
 import Kalman
-import WorkerTracker
-import DataRouter
+import QueueManager
 import logging
 
 
@@ -18,18 +17,16 @@ class LiveFilter:
 
         self.logger.info("LiveFilter starting.")
         DataLoader.load_data_from_text_files()
-        self.worker_tracker = None
-        self.data_router = DataRouter.DataRouter()
-        #self.data_source = MeasurementPoller.RabbitMQPoller(self.data_router.input_data_queue)
-        self.data_source = MeasurementPoller.RabbitMQPoller(self.data_router.input_data_queue)
+        self.queue_manager = QueueManager.QueueManager()
+        #self.data_source = MeasurementPoller.RabbitMQPoller(self.queue_manager.input_data_queue)
+        self.data_source = MeasurementPoller.SavedMeasurementPoller(self.queue_manager.input_data_queue)
 
     def start(self):
-        self.worker_tracker = WorkerTracker.WorkerTracker(self.data_router)
         self.data_source.start()
+        self.queue_manager.start()
 
     def stop(self):
-        self.data_router.terminated = True
-        self.worker_tracker.terminated = True
+        self.queue_manager.terminated = True
         self.data_source.terminated = True
 
 def main():

@@ -1,5 +1,5 @@
 import unittest
-import DataRouter
+import QueueManager
 import DataLoader
 import DataStructures
 import threading
@@ -32,7 +32,7 @@ class TestDataRouter(unittest.TestCase):
         self.site_list = list(self.config_data['sites'].keys())
 
     def test_validation(self):
-        router = DataRouter.DataRouter(self.sites, self.faults)
+        router = QueueManager.QueueManager(self.sites, self.faults)
         threading.Thread(target=router.incoming_data_router).start()
         data = DataStructures.get_gps_measurement_queue_message(gps_data=get_data(self.site_list))
         router.input_data_queue.put(data)
@@ -59,7 +59,7 @@ class TestDataRouter(unittest.TestCase):
             self.fail("Validator did not put item into kalman start queue.")
 
     def test_fresh_kalman_start(self):
-        router = DataRouter.DataRouter(self.sites, self.faults)
+        router = QueueManager.QueueManager(self.sites, self.faults)
         threading.Thread(target=router.incoming_data_router).start()
         threading.Thread(target=router.kalman_initializer).start()
         validator = ValidatorThread.default_validator(router.data_validator_queue,
@@ -77,7 +77,7 @@ class TestDataRouter(unittest.TestCase):
             self.fail("Kalman start request on a brand new kalman filter start did not occur.")
 
     def test_stale_kalman_start(self):
-        router = DataRouter.DataRouter(self.sites, self.faults)
+        router = QueueManager.QueueManager(self.sites, self.faults)
         new_kalman = DataStructures.get_empty_kalman_state(self.sites, self.faults)
         router.kalman_map[self.site_list[1]] = new_kalman
         gps_msg = get_data(self.site_list, time=1000)
@@ -103,7 +103,7 @@ class TestDataRouter(unittest.TestCase):
             self.fail("New Kalman state was not created for a stale Kalman filter.")
 
     def test_running_kalman_start(self):
-        router = DataRouter.DataRouter(self.sites, self.faults)
+        router = QueueManager.QueueManager(self.sites, self.faults)
         new_kalman = DataStructures.get_empty_kalman_state(self.sites, self.faults)
         router.kalman_map[self.site_list[1]] = new_kalman
         gps_msg = get_data(self.site_list, time=1000)
@@ -125,7 +125,7 @@ class TestDataRouter(unittest.TestCase):
         self.assertTrue(router.kalman_start_queue.empty(), "Kalman start queue is not empty, but should be.")
 
     def test_paused_kalman_start(self):
-        router = DataRouter.DataRouter(self.sites, self.faults)
+        router = QueueManager.QueueManager(self.sites, self.faults)
         new_kalman = DataStructures.get_empty_kalman_state(self.sites, self.faults)
         router.kalman_map[self.site_list[1]] = new_kalman
         gps_msg = get_data(self.site_list, time=1000)
@@ -157,7 +157,7 @@ class TestDataRouter(unittest.TestCase):
         DataStructures.configuration['group_timespan'] = 1
         DataStructures.configuration['delay_timespan'] = 15
 
-        router = DataRouter.DataRouter(self.sites, self.faults)
+        router = QueueManager.QueueManager(self.sites, self.faults)
         threading.Thread(target=router.incoming_data_router).start()
         threading.Thread(target=router.time_grouper).start()
 

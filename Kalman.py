@@ -18,10 +18,6 @@ class KalmanThread(threading.Thread):
         self.output_queue = output_queue
         self.outputs = None
         self.terminated = False
-        self.force_no_delta_t = True
-        ''' force_no_delta_t for unit tests to usefully compare output with other Kalman filter
-            delta_t does not calculate time differential in old code, so this
-            is needed for comparison consistency'''
         threading.Thread.__init__(self)
 
     def run(self):
@@ -93,7 +89,6 @@ class KalmanThread(threading.Thread):
             self.logger.info("{} Kalman filter ignoring old data: {}".format(kalman['site'], kalman['data_set'][-1]))
 
     def update_matrix(self, kalman):
-        self.output_state(kalman, print, "New Kal BUM")
         if kalman['prev_time'] is not None:
             kalman['delta_t'] = kalman['time'] - kalman['prev_time']
             kalman['prev_time'] = kalman['time']
@@ -105,7 +100,6 @@ class KalmanThread(threading.Thread):
         interm = (kalman['h'] * kalman['m'] * kalman['h'].T + kalman['r']).I
         kalman['k'] = kalman['m'] * kalman['h'].T * interm
         kalman['p'] = (kalman['iden'] - kalman['k'] * kalman['h']) * kalman['m']
-        self.output_state(kalman, print, "New Kal AUM")
         self.calc_res(kalman)
 
     def calc_res(self, kalman):
@@ -115,7 +109,6 @@ class KalmanThread(threading.Thread):
             self.determine_state(kalman)
 
     def determine_state(self, kalman):
-        self.output_state(kalman, print, "New Kal DS")
         if kalman['sm_count'] >= kalman['smoothing'] and kalman['start_up']:
             kalman['start_up'] = False
         if kalman['sm_count'] < kalman['smoothing']:
@@ -123,10 +116,6 @@ class KalmanThread(threading.Thread):
             self.normal_mode(kalman)
             self.end_proc(kalman)
         else:
-            eq_flag = kalman['eq_flag']
-            eq_count = kalman['eq_count']
-            res = kalman['res']
-            r = kalman['r']
             if np.abs(kalman['res'][0,0]) < np.sqrt(kalman['r'][0,0]) * kalman['eq_threshold']:
                 kalman['eq_flag'][0,0] = False
                 kalman['eq_count'][0,0] = 0
@@ -156,16 +145,14 @@ class KalmanThread(threading.Thread):
                 self.end_proc(kalman)
 
     def normal_mode(self, kalman):
-        self.output_state(kalman, print, "New Kal NM")
         kalman['state'] = kalman['phi'] * kalman['state'] + kalman['k'] * kalman['res']
         kalman['state_2'] = kalman['phi'] * kalman['state_2']
         kalman['tag'] = True if kalman['sm_count'] < kalman['smoothing'] and not kalman['start_up']   \
                         else False
-        self.outputs = copy.copy(kalman)
-        #self.send stuff in here, not sure if needed
+        # Create copy of kalman state to be used for generating output
+        self.outputs = copy.copy(kalman)        
 
     def eq_state(self, kalman):
-        self.output_state(kalman, print, "New Kal PEQS")
         self.offset_reset(kalman)
         kalman['sm_count'] = 0
         kalman['s_measure'].append((kalman['data_set'][-1]['t'],
@@ -183,10 +170,8 @@ class KalmanThread(threading.Thread):
         kalman['s_measure'] = []
         kalman['write'] = True
         kalman['override_flag'] = False
-        #self.output_state(kalman, print, "New Kal AEQS")
 
     def false_eq_state(self, kalman):
-        self.output_state(kalman, print, "New Kal FEQS")
         kalman['write'] = True
         self.end_pass_state(kalman)
         kalman['override_flag'] = True
@@ -265,8 +250,8 @@ class KalmanThread(threading.Thread):
     def eq_num_test(self, kalman):
         return max(kalman['eq_count'][0:3, 0])
 
+    # troubleshooting function to output current state of Kalman filter
     def output_state(self, kalman, output, message):
-        return
         disp_list = ['h', 'phi', 'state', 'state_2', 'offset', 'max_offset', 'iden', 'k', 'm', 'p',
                      'measurement_matrix', 'r', 'def_r', 'synth_n', 'synth_e', 'synth_v',
                      'i_state', 'i_state_2', 'q', 'res', 'override_flag', 'sm_count',

@@ -33,6 +33,8 @@ class InverterThread(threading.Thread):
                 smooth_mat = inv_conf['smooth_mat']
                 sites = conf['sites']
 
+                # This logic relates the sites that exist in this data set to the array
+                # elements for that site
                 site_correlate = []
                 for site, kalman_output in kalman_data.items():
                     site_idx = sites[site]['index']
@@ -44,21 +46,22 @@ class InverterThread(threading.Thread):
                         offset[site_idx * 3 + 2] = kalman_output['kv']
                     else:
                         offset[site_idx * 3: site_idx * 3 + 3] = 0
-
+                # Sort by index so the list is in the correct order
                 site_correlate.sort(key=lambda idx: idx[0])
+
+                # Remove the elements from sub_inputs, etc, that are not part of this
+                # data set
                 valid_site_indexes = np.argwhere(mask[:len(sites)*3, 0] > 0)[:, 0]
                 valid_site_fault_indexes = np.argwhere(mask[:, 0] > 0)[:, 0]
                 present_sub_inputs = sub_inputs[valid_site_indexes, :]
                 sub_inputs = np.vstack([present_sub_inputs, smooth_mat])
                 present_offsets = offset[valid_site_fault_indexes]
 
+                # Perform matrix math now that only extant sites are part of the solution
                 solution = optimize.nnls(sub_inputs, present_offsets)[0]
-
                 calc_offset = sub_inputs.dot(solution)
-
                 output = self.generate_output(solution, kalman_data, site_correlate,
                                               calc_offset, time_stamp, conf)
-
                 self.output_queue.put((output, conf['model'], conf['tag']))
             except queue.Empty:
                 pass
@@ -156,6 +159,7 @@ class InverterThread(threading.Thread):
     def stop(self):
         self.terminated = True
 
+# Function creates the necessary matrix data in order to do the inversion
 def config_generator(conf):
     logger = logging.getLogger(__name__)
     start_time = time.time()

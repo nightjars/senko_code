@@ -2,12 +2,16 @@ import DataStructures
 import queue
 import multiprocessing
 import threading
-import time as Time
+import time
 import Kalman
 import calendar
 import logging
+import Inverter
+#import pika
+import json
 
-class DataRouter:
+
+class QueueManager:
     # deal with the lifecycle of data going through the system
     def __init__(self):
         self.logger = logging.getLogger(__name__)
@@ -30,18 +34,35 @@ class DataRouter:
         self.initial_time_stamp = None
 
         self.threads = []
+        self.inverter_threads = []
+        self.kalman_threads = []
+
 
     def stop(self):
         self.terminated = True
+        self.logger.info("Beginning worker thread shutdown.")
+        for thread in (self.inverter_threads + self.kalman_threads):
+            thread.stop()
+            thread.join()
+        self.logger.info("Worker threads shutdown.")
 
-    def router_start(self):
+    def start(self):
         self.logger.info("Data router starting.")
         self.threads.append(threading.Thread(target=self.incoming_data_router))
         self.threads.append(threading.Thread(target=self.time_grouper))
-
+        self.threads.append(threading.Thread(target=self.output_generator))
         for thread in self.threads:
             thread.start()
-        # may want to add logic to restart threads if something dies
+        while len(self.inverter_threads) < DataStructures.configuration['max_inverter_threads']:
+            self.inverter_threads.append(Inverter.InverterThread(
+                self.inverter_queue,
+                self.completed_inversion_queue))
+            self.inverter_threads[-1].start()
+        while len(self.kalman_threads) < DataStructures.configuration['max_kalman_threads']:
+            self.kalman_threads.append(Kalman.KalmanThread(
+                self.kalman_start_queue,
+                self.time_grouping_queue))
+            self.kalman_threads[-1].start()
 
     def incoming_data_router(self):
         while not self.terminated:
@@ -50,7 +71,9 @@ class DataRouter:
                 self.data_num += 1
                 if self.initial_time_stamp is None:
                     self.initial_time_stamp = new_data['t']
+
                 for run in self.inversion_runs:
+                    # Find inversion runs that need to process this measurement
                     if new_data['site'] not in run['filters']:
                         if new_data['site'] in run['sites']:
                             if not new_data['site'] in run['filters']:
@@ -68,15 +91,10 @@ class DataRouter:
                             run['filters'][new_data['site']] = kalman
 
                         measure_time = new_data['t']
-                        # If there's in entry in the kalman map, the kalman filter is in one of two states:
-                        # activity processing, in which case add the work to the filter's queue.  If not actively
-                        # processing, re-start the kalman filter.
+                        # Place new measurement into kalman filter's measurement queue and place
+                        # the filter into the start queue so that a kalman worker thread will
+                        # pick it up.
                         kalman['measurement_queue'].put((measure_time, self.data_num, new_data))
-
-                        # lock will be set if a thread is currently working on this data
-                        #if kalman['lock'].acquire(False):
-                        #    # Lock acquired, nothing is processing this data, put into start queue
-                        #    kalman['lock'].release()
                         self.kalman_start_queue.put(kalman)
                 self.newest_data_timestamp = max(new_data['t'], self.newest_data_timestamp)
             except queue.Empty:
@@ -88,19 +106,19 @@ class DataRouter:
             run_data[run['model']] = run
 
         while not self.terminated:
-            (time, data, run) = self.time_grouping_queue.get()
+            (timestamp, data, run) = self.time_grouping_queue.get()
             if self.last_sent_data_timestamp is None:
                 self.last_sent_data_timestamp = self.initial_time_stamp - 1
-            if time > self.last_sent_data_timestamp:
-                if time not in self.time_grouped_messages:
-                    self.time_grouped_messages[time] = {}
-                if run['model'] in self.time_grouped_messages[time]:
-                    self.time_grouped_messages[time][run['model']][data['site']] = data
+            if timestamp > self.last_sent_data_timestamp:
+                if timestamp not in self.time_grouped_messages:
+                    self.time_grouped_messages[timestamp] = {}
+                if run['model'] in self.time_grouped_messages[timestamp]:
+                    self.time_grouped_messages[timestamp][run['model']][data['site']] = data
                 else:
-                    self.time_grouped_messages[time][run['model']] = {data['site']: data}
+                    self.time_grouped_messages[timestamp][run['model']] = {data['site']: data}
             else:
                 self.logger.info("Data for {} was too late {}, working on {}".format(
-                    data['site'], time, self.last_sent_data_timestamp))
+                    data['site'], timestamp, self.last_sent_data_timestamp))
             if self.newest_data_timestamp - self.conf['delay_timespan'] > self.last_sent_data_timestamp:
                 self.last_sent_data_timestamp += 1
                 if self.last_sent_data_timestamp in self.time_grouped_messages:
@@ -109,3 +127,45 @@ class DataRouter:
                         self.inverter_queue.put((self.last_sent_data_timestamp, data_to_send, run_data[model]))
                     self.logger.info("Sent timegroup {} to inverter queue.".format(self.last_sent_data_timestamp))
                     del self.time_grouped_messages[self.last_sent_data_timestamp]
+
+    def output_generator(self):
+        return
+        credentials = pika.PlainCredentials(DataStructures.configuration['rabbit_mq_output']['userid'],
+                                            DataStructures.configuration['rabbit_mq_output']['password'])
+        parameters = pika.ConnectionParameters(DataStructures.configuration['rabbit_mq_output']['host'],
+                                               DataStructures.configuration['rabbit_mq_output']['port'],
+                                               DataStructures.configuration['rabbit_mq_output']['virtual_host'],
+                                               credentials)
+        connection = pika.BlockingConnection(parameters)
+        channel = connection.channel()
+        channel.exchange_declare(exchange=DataStructures.configuration['rabbit_mq_output']['exchange'],
+                                 type='topic', durable=True, auto_delete=False)
+
+        while not self.terminated:
+            try:
+                (output_data, model, tag) = self.completed_inversion_queue.get(timeout=1)
+                data_out = []
+                for d in output_data['data']:
+                    if d[4]:
+                        data_out.append([d[0], d[1], d[2]])
+                    else:
+                        data_out.append([d[0], 0., 0.])
+                output = {
+                    't': float(output_data['time']),
+                    'tag': tag,
+                    'model': model,
+                    'result': json.dumps({
+                        'estimates': [[x[0], x[7], x[8]] for x in output_data['estimates']],
+                        'slip': [x[8] for x in output_data['slip']],
+                        'data': data_out,
+                        'time': float(output_data['time']),
+                        'label': output_data['label'],
+                        'Mw': output_data['Magnitude'],
+                        'M': output_data['Moment']
+                    })
+                }
+                channel.basic_publish(exchange=DataStructures.configuration['rabbit_mq_output']['exchange'],
+                                      routing_key=DataStructures.configuration['rabbit_mq_output']['model'],
+                                      body=json.dumps(output))
+            except queue.Empty:
+                pass
