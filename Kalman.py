@@ -8,6 +8,7 @@ import logging
 import multiprocessing
 import queue
 import copy
+import sys
 
 
 class KalmanThread(threading.Thread):
@@ -37,8 +38,12 @@ class KalmanThread(threading.Thread):
                             self.process_measurement(kalman)
                         except queue.Empty:
                             pass
-                        except:
-                            self.legger.error("Error processing measurement: {}, {}".format(kalman, measurement))
+                        except Exception:
+                            self.logger.error("Error processing measurement: {}".format(measurement))
+                            for key, val in kalman.items():
+                                if key != 'sites' and key != 'run' and key != 'data_set':
+                                    self.logger.error("{}:{}".format(key, val))
+                            self.logger.error("Error details:".format(sys.exc_info()))
                     kalman['lock'].release()
                     self.logger.debug("{} finished processing {}".format(self, kalman['site']))
 
@@ -50,7 +55,7 @@ class KalmanThread(threading.Thread):
             gps_data = kalman['data_set'][-1]
             kalman['time'] = gps_data['t']
             kalman['prev_time'] = gps_data['t']
-            if gps_data['n'] != 0. or gps_data['e'] != 0. or gps_data['v'] != 0.:
+            if gps_data['n'] != 0. or gps_data['e'] != 0. or gps_data['v'] != 0.:                
                 cn = gps_data['cn']
                 cv = gps_data['cv']
                 ce = gps_data['ce']
@@ -61,10 +66,9 @@ class KalmanThread(threading.Thread):
                 measure_matrix = np.matrix([[n], [e], [v]])
                 res = measure_matrix - kalman['h'] * kalman['phi'] * kalman['state'] -      \
                                        kalman['h'] * kalman['phi'] * kalman['state_2']
-                if np.abs(res[0, 0]) < kalman['max_offset'] and \
-                                np.abs(res[1, 0]) < kalman['max_offset'] and \
-                                np.abs(res[2, 0]) < kalman['max_offset']:
-                    kalman['temp_kill'] = 0  # remove when kalman bug is fixed
+                if np.abs(res[0, 0]) < kalman['max_offset'] and np.abs(res[1, 0]) < kalman['max_offset'] and   \
+                            np.abs(res[2, 0]) < kalman['max_offset']:
+                    kalman['temp_kill'] = 0     # remove when kalman bug is fixed
                     if kalman['last_calculation'] is None:
                         kalman['site'] = kalman['sites'][kalman['data_set'][-1]['site']]
                         kalman['state_2'] = measure_matrix * 1.0
@@ -79,9 +83,10 @@ class KalmanThread(threading.Thread):
                         else:
                             self.update_matrix(kalman)
                 else:
-                    kalman['data_set'] = kalman['data_set'][-1]
+                    kalman['data_set'] = [kalman['data_set'][-1]]
                     #temporary logic to deal with jammed filters - see datarouter.py for details
                     kalman['temp_kill'] += 1
+                    self.logger.info("#{} : Ignored measurement {}".format(kalman['temp_kill'], kalman['site']))
 
                 kalman['last_calculation'] = kalman['data_set'][-1]['t']
         else:

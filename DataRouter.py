@@ -63,9 +63,9 @@ class DataRouter:
                         # stuck and preventus further input from being processed.  Once the actual problem with the kalman filter is
                         # solved, this if-block should be removed.
                         if kalman['temp_kill'] > kalman['temp_kill_limit']:
+                            self.logger.info("Restarted jammed filter {}".format(kalman['site']))
                             kalman = DataStructures.get_empty_kalman_state(run)
                             run['filters'][new_data['site']] = kalman
-                            self.logger.info("Restarted jammed filters {}".format(kalman['site']))
 
                         measure_time = new_data['t']
                         # If there's in entry in the kalman map, the kalman filter is in one of two states:
