@@ -50,8 +50,7 @@ class KalmanThread(threading.Thread):
             gps_data = kalman['data_set'][-1]
             kalman['time'] = gps_data['t']
             kalman['prev_time'] = gps_data['t']
-            if gps_data['n'] != 0. or gps_data['e'] != 0. or gps_data['v'] != 0.:                
-                kalman['temp_kill'] = 0     # remove when kalman bug is fixed
+            if gps_data['n'] != 0. or gps_data['e'] != 0. or gps_data['v'] != 0.:
                 cn = gps_data['cn']
                 cv = gps_data['cv']
                 ce = gps_data['ce']
@@ -62,8 +61,10 @@ class KalmanThread(threading.Thread):
                 measure_matrix = np.matrix([[n], [e], [v]])
                 res = measure_matrix - kalman['h'] * kalman['phi'] * kalman['state'] -      \
                                        kalman['h'] * kalman['phi'] * kalman['state_2']
-                if np.abs(res[0, 0]) < kalman['max_offset'] and np.abs(res[1, 0]) < kalman['max_offset'] and   \
-                            np.abs(res[2, 0]) < kalman['max_offset']:
+                if np.abs(res[0, 0]) < kalman['max_offset'] and \
+                                np.abs(res[1, 0]) < kalman['max_offset'] and \
+                                np.abs(res[2, 0]) < kalman['max_offset']:
+                    kalman['temp_kill'] = 0  # remove when kalman bug is fixed
                     if kalman['last_calculation'] is None:
                         kalman['site'] = kalman['sites'][kalman['data_set'][-1]['site']]
                         kalman['state_2'] = measure_matrix * 1.0
