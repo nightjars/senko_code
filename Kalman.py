@@ -150,7 +150,7 @@ class KalmanThread(threading.Thread):
         kalman['tag'] = True if kalman['sm_count'] < kalman['smoothing'] and not kalman['start_up']   \
                         else False
         # Create copy of kalman state to be used for generating output
-        self.outputs = copy.copy(kalman)        
+        self.outputs = copy.copy(kalman)
 
     def eq_state(self, kalman):
         self.offset_reset(kalman)

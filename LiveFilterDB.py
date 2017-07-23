@@ -100,11 +100,24 @@ def populate_inversions(db):
             db.commit()
 
 def populate_offsets(db):
-    c = db.cursor()
-    for inversion in c.execute('SELECT id FROM inversions'):
-        print (inversion)
-        for fault in c.execute('SELECT * FROM faults WHERE inversion_id = {}'.format(inversion[0])):
-            print (fault)
+    inv_cur = db.cursor()
+    fault_cur = db.cursor()
+    station_cur = db.cursor()
+    for inversion in inv_cur.execute('SELECT id FROM inversions ' + \
+                                     'WHERE model = "ValidationTestSA"'):
+        for fault in fault_cur.execute('SELECT * FROM faults WHERE inversion_id = {}'.format(inversion[0])):
+            (fault_id, fault_seq, inv_id, fault_lat, fault_lon, fault_depth, fault_strike, fault_dip,
+             fault_rake, fault_len, fault_wid, _) = fault
+            for station in station_cur.execute('SELECT site_name, lat, lon, ele FROM sites '
+                                               'WHERE site_name = "AVRY"'):
+                (site_name, site_lat, site_lon, site_ele) = station
+                slip = 1        # from example usage, not sure what this means
+                rake = 180      # from example usage, not sure why real rake value isn't used
+                offset = dist_filt.adp(fault_lat, fault_lon, fault_depth, fault_strike, fault_dip,
+                              rake, fault_len, fault_wid, slip, site_lat, site_lon)
+                if offset > 0:
+                    print (offset)
+                    return
 
 db = sqlite3.connect('LiveFilter.db')
 createdb(db)
