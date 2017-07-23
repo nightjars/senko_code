@@ -21,7 +21,7 @@ configuration = {
                          'password': 'nars0add',
                          'model': 'Test'},
     'mongo_db_output': {'host': 'pc96225.d.cwu.edu',
-                        'port': '27018',
+                        'port': 27018,
                         'userid': 'nif',
                         'password': 'nars0add'},
     'kalman_stale': 30,  # (seconds) Time before kalman states are wiped
