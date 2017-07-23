@@ -20,6 +20,10 @@ configuration = {
                          'virtual_host': '/rtgps-products',
                          'password': 'nars0add',
                          'model': 'Test'},
+    'mongo_db_output': {'host': 'pc96225.d.cwu.edu',
+                        'port': '27018',
+                        'userid': 'nif',
+                        'password': 'nars0add'},
     'kalman_stale': 30,  # (seconds) Time before kalman states are wiped
     'group_timespan': 1,  # (seconds) Group batches of data in timespan
     'delay_timespan': 15,  # (seconds) Time to wait for laggard data
@@ -39,9 +43,9 @@ inversion_runs = [
         'sites': None,
         'faults': None,
         'filters': None,
-        'model': 'ValidationTestSA',
+        'model': 'SanAndreas-20x4',
         'label': 'Refactor Version',
-        'tag': 'Test',
+        'tag': 'current',
         'minimum_offset': 0.001,  # inverter config/validator/readonceconfig
         'convergence': 320.,  # read once config
         'eq_pause': 10.,
@@ -72,9 +76,9 @@ inversion_runs = [
         'sites': None,
         'faults': None,
         'filters': None,
-        'model': 'ValidationTestCAS',
+        'model': 'Cascadia-20x10',
         'label': 'Refactor Version',
-        'tag': 'Test',
+        'tag': 'current',
         'minimum_offset': 0.001,  # inverter config/validator/readonceconfig
         'convergence': 45.,  # read once config
         'eq_pause': 120.,
@@ -105,9 +109,9 @@ inversion_runs = [
         'sites': None,
         'faults': None,
         'filters': None,
-        'model': 'ValidationTestMAT',
+        'model': 'MAT-57x4',
         'label': 'Refactor Version',
-        'tag': 'Test',
+        'tag': 'current',
         'minimum_offset': 0.001,  # inverter config/validator/readonceconfig
         'convergence': 320.,  # read once config
         'eq_pause': 120.,
@@ -138,9 +142,9 @@ inversion_runs = [
         'sites': None,
         'faults': None,
         'filters': None,
-        'model': 'ValidationTestNAZ',
+        'model': 'Nazca-40x4',
         'label': 'Refactor Version',
-        'tag': 'Test',
+        'tag': 'current',
         'minimum_offset': 0.001,  # inverter config/validator/readonceconfig
         'convergence': 320.,  # read once config
         'eq_pause': 120.,

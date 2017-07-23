@@ -9,6 +9,7 @@ import logging
 import Inverter
 import pika
 import json
+import pymongo
 
 
 class QueueManager:
@@ -140,6 +141,12 @@ class QueueManager:
         channel.exchange_declare(exchange=DataStructures.configuration['rabbit_mq_output']['exchange_name'],
                                  type='topic', durable=True, auto_delete=False)
 
+        mongo_client = pymongo.MongoClient(DataStructures.configuration['mongo_db_output']['host'],
+                                           DataStructures.configuration['mongo_db_output']['port'])
+        odb = mongo_client.products
+        odb.authenticate(DataStructures.configuration['mongo_db_output']['userid'],
+                         DataStructures.configuration['mongo_db_output']['password'])
+        mongo_collection = odb.slip_inversion
         while not self.terminated:
             try:
                 (output_data, model, tag) = self.completed_inversion_queue.get(timeout=1)
@@ -166,6 +173,10 @@ class QueueManager:
                 channel.basic_publish(exchange=DataStructures.configuration['rabbit_mq_output']['exchange_name'],
                                       routing_key=DataStructures.configuration['rabbit_mq_output']['model'],
                                       body=json.dumps(output))
-                self.logger.info("Published data to RabbitMQ server for model {} timestamp {}.".format(output['model'], output['t']))
+                self.logger.info(
+                    "Published data to RabbitMQ server for model {} timestamp {}.".format(output['model'], output['t']))
+                mongo_collection.insert(output)
+                self.logger.info(
+                    "Published data to MongoDB server for model {} timestamp {}.".format(output['model'], output['t']))
             except queue.Empty:
                 pass
