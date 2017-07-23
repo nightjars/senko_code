@@ -18,8 +18,10 @@ class LiveFilter:
         self.logger.info("LiveFilter starting.")
         DataLoader.load_data_from_text_files()
         self.queue_manager = QueueManager.QueueManager()
-        #self.data_source = MeasurementPoller.RabbitMQPoller(self.queue_manager.input_data_queue)
-        self.data_source = MeasurementPoller.SavedMeasurementPoller(self.queue_manager.input_data_queue)
+
+        # Selection for using saved measurements or get measurements from RabbitMQ server
+        self.data_source = MeasurementPoller.RabbitMQPoller(self.queue_manager.input_data_queue)
+        #self.data_source = MeasurementPoller.SavedMeasurementPoller(self.queue_manager.input_data_queue)
 
     def start(self):
         self.data_source.start()

@@ -20,6 +20,9 @@ class KalmanThread(threading.Thread):
         self.terminated = False
         threading.Thread.__init__(self)
 
+    def stop(self):
+        self.terminated = True
+
     def run(self):
         np.set_printoptions(precision=30)
         while not self.terminated:
@@ -30,6 +33,8 @@ class KalmanThread(threading.Thread):
                     while not self.terminated and not kalman['measurement_queue'].empty():
                         try:
                             (_, _, measurement) = kalman['measurement_queue'].get(timeout=1)
+                            if kalman['site'] is None:
+                                kalman['site'] = kalman['sites'][measurement['site']]
                             kalman['data_set'].append(measurement)
                             self.process_measurement(kalman)
                         except queue.Empty:
@@ -66,7 +71,6 @@ class KalmanThread(threading.Thread):
                             np.abs(res[2, 0]) < kalman['max_offset']:
                     kalman['temp_kill'] = 0     # remove when kalman bug is fixed
                     if kalman['last_calculation'] is None:
-                        kalman['site'] = kalman['sites'][kalman['data_set'][-1]['site']]
                         kalman['state_2'] = measure_matrix * 1.0
                     else:
                         kalman['measurement_matrix'] = measure_matrix

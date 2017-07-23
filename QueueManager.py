@@ -7,7 +7,7 @@ import Kalman
 import calendar
 import logging
 import Inverter
-#import pika
+import pika
 import json
 
 
@@ -129,7 +129,6 @@ class QueueManager:
                     del self.time_grouped_messages[self.last_sent_data_timestamp]
 
     def output_generator(self):
-        return
         credentials = pika.PlainCredentials(DataStructures.configuration['rabbit_mq_output']['userid'],
                                             DataStructures.configuration['rabbit_mq_output']['password'])
         parameters = pika.ConnectionParameters(DataStructures.configuration['rabbit_mq_output']['host'],
@@ -138,7 +137,7 @@ class QueueManager:
                                                credentials)
         connection = pika.BlockingConnection(parameters)
         channel = connection.channel()
-        channel.exchange_declare(exchange=DataStructures.configuration['rabbit_mq_output']['exchange'],
+        channel.exchange_declare(exchange=DataStructures.configuration['rabbit_mq_output']['exchange_name'],
                                  type='topic', durable=True, auto_delete=False)
 
         while not self.terminated:
@@ -164,8 +163,9 @@ class QueueManager:
                         'M': output_data['Moment']
                     })
                 }
-                channel.basic_publish(exchange=DataStructures.configuration['rabbit_mq_output']['exchange'],
+                channel.basic_publish(exchange=DataStructures.configuration['rabbit_mq_output']['exchange_name'],
                                       routing_key=DataStructures.configuration['rabbit_mq_output']['model'],
                                       body=json.dumps(output))
+                self.logger.info("Published data to RabbitMQ server for model {} timestamp {}.".format(output['model'], output['t']))
             except queue.Empty:
                 pass
