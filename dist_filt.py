@@ -31,10 +31,9 @@ def defpt( lat, lon, dep, strike, dip, rak, length, wid, slip, ten_slip, olat, o
 	if dis < 1000:
 
 		#print("Dis = {}".format(dis))
-		print("./defpt.pl {} {} {} {} {} {} {} {} {} {} {} {} {}".format(lat, lon, dep, strike, dip, rak, length, wid, slip, ten_slip, olat, olon, odep ))
+		#print("./defpt.pl {} {} {} {} {} {} {} {} {} {} {} {} {}".format(lat, lon, dep, strike, dip, rak, length, wid, slip, ten_slip, olat, olon, odep ))
 		out = sub.Popen("./defpt.pl {} {} {} {} {} {} {} {} {} {} {} {} {}".format(lat, lon, dep, strike, dip, rak, length, wid, slip, ten_slip, olat, olon, odep ), shell=True, stdout=sub.PIPE).stdout.read()
 	#print("this is out: {}".format(out))
-		print (out)
 		out2 = out.split()
 
 		dx = float(out2[0])
