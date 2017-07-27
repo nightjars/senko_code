@@ -1,5 +1,5 @@
 import threading
-import DataStructures
+import Config
 import time
 import random
 import calendar

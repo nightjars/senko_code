@@ -1,4 +1,4 @@
-import DataStructures
+import Config
 import DataLoader
 import threading
 import random

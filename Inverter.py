@@ -1,5 +1,5 @@
 import threading
-import DataStructures
+import Config
 import numpy as np
 from scipy import optimize
 from datetime import datetime as dt

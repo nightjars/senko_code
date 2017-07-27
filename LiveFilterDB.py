@@ -1,8 +1,142 @@
 import sqlite3
-import DataStructures
+import Config
 import dist_filt
 import traceback
-import numpy as np
+
+inversion_runs = [
+    {
+        'sites_file': './SA_offset.d',
+        'faults_file': './SA_faults.d',
+        'sites': None,
+        'faults': None,
+        'filters': None,
+        'model': 'SanAndreas-20x4',
+        'label': 'Refactor Version',
+        'tag': 'current',
+        'minimum_offset': 0.001,  # inverter config/validator/readonceconfig
+        'convergence': 320.,  # read once config
+        'eq_pause': 10.,
+        'eq_threshold': 0.01,
+        'strike_slip': False,
+        'mes_wait': 2,
+        'max_offset': 4000,
+        'offset': False,
+        'min_r': 0.0001,
+        'float_equality': 1e-9,
+        'inverter_configuration': {
+            'strike_slip': None,
+            'short_smoothing': True,
+            'smoothing': True,
+            'corner_fix': False,
+            'offsets_per_site': 3,
+            'subfault_len': 60.,
+            'subfault_wid': 30.,
+            'offset': None,
+            'sub_inputs': None,
+            'smooth_mat': None,
+            'mask': None
+        }
+    },
+    {
+        'sites_file': './CAS_offset.d',
+        'faults_file': './CAS_faults.d',
+        'sites': None,
+        'faults': None,
+        'filters': None,
+        'model': 'Cascadia-20x10',
+        'label': 'Refactor Version',
+        'tag': 'current',
+        'minimum_offset': 0.001,  # inverter config/validator/readonceconfig
+        'convergence': 45.,  # read once config
+        'eq_pause': 120.,
+        'eq_threshold': 1.,
+        'strike_slip': False,
+        'mes_wait': 2,
+        'max_offset': 100,
+        'offset': False,
+        'min_r': 0.0001,
+        'float_equality': 1e-9,
+        'inverter_configuration': {
+            'strike_slip': None,
+            'short_smoothing': True,
+            'smoothing': True,
+            'corner_fix': False,
+            'offsets_per_site': 3,
+            'subfault_len': 60.,
+            'subfault_wid': 30.,
+            'offset': None,
+            'sub_inputs': None,
+            'smooth_mat': None,
+            'mask': None
+        }
+    },
+    {
+        'sites_file': './MAT_offset.d',
+        'faults_file': './MAT_faults.d',
+        'sites': None,
+        'faults': None,
+        'filters': None,
+        'model': 'MAT-57x4',
+        'label': 'Refactor Version',
+        'tag': 'current',
+        'minimum_offset': 0.001,  # inverter config/validator/readonceconfig
+        'convergence': 320.,  # read once config
+        'eq_pause': 120.,
+        'eq_threshold': 1.,
+        'strike_slip': False,
+        'mes_wait': 2,
+        'max_offset': 100,
+        'offset': False,
+        'min_r': 0.0001,
+        'float_equality': 1e-9,
+        'inverter_configuration': {
+            'strike_slip': None,
+            'short_smoothing': True,
+            'smoothing': True,
+            'corner_fix': False,
+            'offsets_per_site': 3,
+            'subfault_len': 60.,
+            'subfault_wid': 30.,
+            'offset': None,
+            'sub_inputs': None,
+            'smooth_mat': None,
+            'mask': None
+        }
+    },
+    {
+        'sites_file': './NAZ_offset.d',
+        'faults_file': './NAZ_faults.d',
+        'sites': None,
+        'faults': None,
+        'filters': None,
+        'model': 'Nazca-40x4',
+        'label': 'Refactor Version',
+        'tag': 'current',
+        'minimum_offset': 0.001,  # inverter config/validator/readonceconfig
+        'convergence': 320.,  # read once config
+        'eq_pause': 120.,
+        'eq_threshold': .1,
+        'strike_slip': False,
+        'mes_wait': 2,
+        'max_offset': 100,
+        'offset': False,
+        'min_r': 0.0001,
+        'float_equality': 1e-9,
+        'inverter_configuration': {
+            'strike_slip': None,
+            'short_smoothing': True,
+            'smoothing': True,
+            'corner_fix': False,
+            'offsets_per_site': 3,
+            'subfault_len': 60.,
+            'subfault_wid': 30.,
+            'offset': None,
+            'sub_inputs': None,
+            'smooth_mat': None,
+            'mask': None
+        }
+    }
+]
 
 def createdb(db):
     c = db.cursor()
@@ -65,11 +199,12 @@ def populate_inversions(db):
                 strike REAL,
                 dip REAL,                
                 fault_length REAL,
-                fault_width REAL,                
+                fault_width REAL,
+                unknown_field REAL,
                 FOREIGN KEY(inversion_id) REFERENCES inversions(id))''')
 
     db.commit()
-    for run in DataStructures.inversion_runs:
+    for run in inversion_runs:
         with open(run['faults_file']) as file:
             fault_data = [x.split() for x in file.readlines() if x[0] != '#']
 
@@ -90,13 +225,49 @@ def populate_inversions(db):
         db.commit()
         inv_db_rec = c.execute('SELECT id FROM inversions WHERE model="{}"'.format(run['model'])).fetchone()[0]
         for idx, fault in enumerate(faults['subfault_list']):
-            while len(fault) < 9:
+            while len(fault) < 8:
                 fault.append(0.0)
             c.execute('''INSERT INTO faults(sequence_order, inversion_id, lat, lon, depth,
-                         strike, dip, fault_length, fault_width)
-                         VALUES({},{},{},{},{},{},{},{},{})'''.format(
+                         strike, dip, fault_length, fault_width, unknown_field)
+                         VALUES({},{},{},{},{},{},{},{},{},{})'''.format(
                          idx, inv_db_rec, *fault))
             db.commit()
+
+def rebuild_faults_only(db):
+    c = db.cursor()
+    c.execute("DROP TABLE IF EXISTS faults")
+    c.execute('''CREATE TABLE faults
+                    (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    sequence_order INT,
+                    inversion_id INT,
+                    lat REAL,
+                    lon REAL,
+                    depth REAL,
+                    strike REAL,
+                    dip REAL,                
+                    fault_length REAL,
+                    fault_width REAL,    
+                    unknown_field REAL,
+                    FOREIGN KEY(inversion_id) REFERENCES inversions(id))''')
+    db.commit()
+    for run in inversion_runs:
+        with open(run['faults_file']) as file:
+            fault_data = [x.split() for x in file.readlines() if x[0] != '#']
+
+        faults = {
+            'length': float(fault_data[0][0]),
+            'width': float(fault_data[0][1]),
+            'subfault_list': [[float(x) for x in fault_data_line] for fault_data_line in fault_data[1:]]
+        }
+        inv_db_rec = c.execute('SELECT id FROM inversions WHERE model="{}"'.format(run['model'])).fetchone()[0]
+        for idx, fault in enumerate(faults['subfault_list']):
+            while len(fault) < 8:
+                fault.append(0.0)
+            c.execute('''INSERT INTO faults(sequence_order, inversion_id, lat, lon, depth,
+                         strike, dip, fault_length, fault_width, unknown_field)
+                         VALUES({},{},{},{},{},{},{},{},{},{})'''.format(
+                         idx, inv_db_rec, *fault))
+    db.commit()
 
 def populate_offsets(db):
     inv_cur = db.cursor()
@@ -129,7 +300,7 @@ def get_sites(db, inversion_id, min_offset):
                             'ON sites.site_name = site_offset_join.site_name ' \
                             'WHERE site_offset_join.inversion_id = {} ' \
                             'AND site_offset_join.offset >= {}'.format(inversion_id, min_offset)):
-        sites_dict[site] = {'name': site[0],
+        sites_dict[site[0]] = {'name': site[0],
                            'lat': site[1],
                            'lon': site[2],
                            'height': site[3],
@@ -141,7 +312,7 @@ def get_faults(db, inversion_id):
     inv_cur = db.cursor()
     faults_cur = db.cursor()
     sizes = inv_cur.execute('SELECT fault_len, fault_wid FROM inversions WHERE id = {}'.format(inversion_id)).fetchone()
-    faults_data = faults_cur.execute('SELECT lat, lon, depth, strike, dip, fault_length, fault_width ' \
+    faults_data = faults_cur.execute('SELECT lat, lon, depth, strike, dip, fault_length, fault_width, unknown_field ' \
                                      'FROM faults ' \
                                      'WHERE inversion_id = {} ' \
                                      'ORDER BY sequence_order'.format(inversion_id)).fetchall()
@@ -152,17 +323,21 @@ def get_faults(db, inversion_id):
     }
     return faults
 
-def get_inversions(db):
+def get_inversions(db, id=None, brief=False):
     inversions = []
     cur = db.cursor()
-    for inversion in cur.execute('SELECT id, model, label, tag, min_offset, convergence, eq_pause, ' \
-                                  'eq_thresh, strike_slip, wait, max_offset, min_r, fault_len, fault_wid ' \
-                                 'FROM inversions'):
+    query = 'SELECT id, model, label, tag, min_offset, convergence, eq_pause, ' \
+            'eq_thresh, strike_slip, wait, max_offset, min_r, fault_len, fault_wid ' \
+            'FROM inversions '
+    if id is not None:
+        query += 'WHERE id = {}'.format(id)
+    for inversion in cur.execute(query):
         id, model, label, tag, min_offset, convergence, eq_pause, eq_thresh, \
                           strike_slip, wait, max_offset, min_r, fault_len, fault_wid = inversion
         inversions.append({
-            'sites': get_sites(db, id, min_offset),
-            'faults': get_faults(db, id),
+            'id': id,
+            'sites': None if brief else get_sites(db, id, min_offset),
+            'faults': None if brief else get_faults(db, id),
             'filters': None,
             'model': model,
             'label': label,
@@ -201,8 +376,12 @@ def rebuild_database():
     populate_offsets(db)
     db.close()
 
-db = sqlite3.connect('LiveFilter.db')
-a = get_inversions(db)
-for b in a:
-    for c, d in b.items():
-        print ("{}:{}".format(c, d))
+def get_db():
+    return sqlite3.connect('LiveFilter.db')
+
+#db = sqlite3.connect('LiveFilter.db')
+#rebuild_faults_only(db)
+#a = get_inversions(db)
+#for b in a:
+#    for c, d in b.items():
+#        print ("{}:{}".format(c, d))

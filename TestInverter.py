@@ -3,7 +3,7 @@ import Inverter
 import old_inverter
 import multiprocessing as mp
 import threading
-import DataStructures
+import Config
 import LiveFilter
 import time
 import logging
@@ -18,7 +18,7 @@ class InverterTests(unittest.TestCase):
         with InverterTests.test_run_lock:
             if InverterTests.old_result is None:
                 data_source = mp.Queue()
-                DataStructures.configuration['inverter_queue_threshold'] = 10000
+                Config.configuration['inverter_queue_threshold'] = 10000
                 lf = LiveFilter.LiveFilter()
                 lf.data_router.inverter_queue = data_source
                 lf.start()

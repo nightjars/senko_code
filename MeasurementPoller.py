@@ -1,4 +1,4 @@
-import DataStructures
+import Config
 import DataLoader
 import threading
 import random
@@ -38,19 +38,19 @@ class RabbitMQPoller(MeasurementPoller):
             self.send_measurement(json.loads(msg.body))
 
         connection = amqp.Connection(
-            host=DataStructures.configuration['rabbit_mq_input']['host'],
-            userid=DataStructures.configuration['rabbit_mq_input']['userid'],
-            password=DataStructures.configuration['rabbit_mq_input']['password'],
-            virtual_host=DataStructures.configuration['rabbit_mq_input']['virtual_host'],
-            exchange=DataStructures.configuration['rabbit_mq_input']['exchange_name']
+            host=Config.configuration['rabbit_mq_input']['host'],
+            userid=Config.configuration['rabbit_mq_input']['userid'],
+            password=Config.configuration['rabbit_mq_input']['password'],
+            virtual_host=Config.configuration['rabbit_mq_input']['virtual_host'],
+            exchange=Config.configuration['rabbit_mq_input']['exchange_name']
         )
         connection.connect()
         channel = connection.channel()
-        channel.exchange_declare(DataStructures.configuration['rabbit_mq_input']['exchange_name'],
+        channel.exchange_declare(Config.configuration['rabbit_mq_input']['exchange_name'],
                                  'test_fanout', passive=True)
         queue_name = channel.queue_declare(exclusive=True)[0]
         channel.queue_bind(queue_name, exchange=
-                DataStructures.configuration['rabbit_mq_input']['exchange_name'])
+                Config.configuration['rabbit_mq_input']['exchange_name'])
         channel.basic_consume(callback=message_callback, queue=queue_name, no_ack=True)
         while not self.terminated:
             connection.drain_events()

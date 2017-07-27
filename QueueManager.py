@@ -1,4 +1,4 @@
-import DataStructures
+import Config
 import queue
 import multiprocessing
 import threading
@@ -10,24 +10,25 @@ import Inverter
 import pika
 import json
 import pymongo
-
+import RestAPI
 
 class QueueManager:
     # deal with the lifecycle of data going through the system
     def __init__(self):
         self.logger = logging.getLogger(__name__)
-        self.conf = DataStructures.configuration
+        self.conf = Config.configuration
         self.input_data_queue = queue.Queue()
         self.time_grouping_queue = queue.Queue()
         self.inverter_queue = queue.Queue()
         self.kalman_start_queue = queue.Queue()
         self.completed_inversion_queue = queue.Queue()
 
-        self.inversion_runs = DataStructures.inversion_runs
+        self.inversion_runs = Config.inversion_runs
         self.newest_data_timestamp = 0
         self.last_sent_data_timestamp = None
         self.completed_data_count = 0
         self.terminated = False
+        self.restart_output_generator = False
 
         self.data_num = 0
 
@@ -42,7 +43,7 @@ class QueueManager:
     def stop(self):
         self.terminated = True
         self.logger.info("Beginning worker thread shutdown.")
-        for thread in (self.inverter_threads + self.kalman_threads):
+        for thread in (self.threads + self.inverter_threads + self.kalman_threads):
             thread.stop()
             thread.join()
         self.logger.info("Worker threads shutdown.")
@@ -52,14 +53,15 @@ class QueueManager:
         self.threads.append(threading.Thread(target=self.incoming_data_router))
         self.threads.append(threading.Thread(target=self.time_grouper))
         self.threads.append(threading.Thread(target=self.output_generator))
+        self.threads.append(threading.Thread(target=RestAPI.app.run, kwargs={'port': 5002}))
         for thread in self.threads:
             thread.start()
-        while len(self.inverter_threads) < DataStructures.configuration['max_inverter_threads']:
+        while len(self.inverter_threads) < Config.configuration['max_inverter_threads']:
             self.inverter_threads.append(Inverter.InverterThread(
                 self.inverter_queue,
                 self.completed_inversion_queue))
             self.inverter_threads[-1].start()
-        while len(self.kalman_threads) < DataStructures.configuration['max_kalman_threads']:
+        while len(self.kalman_threads) < Config.configuration['max_kalman_threads']:
             self.kalman_threads.append(Kalman.KalmanThread(
                 self.kalman_start_queue,
                 self.time_grouping_queue))
@@ -79,7 +81,7 @@ class QueueManager:
                         if new_data['site'] in run['sites']:
                             if not new_data['site'] in run['filters']:
                                 run['filters'][new_data['site']] = \
-                                    DataStructures.get_empty_kalman_state(run)
+                                    Config.get_empty_kalman_state(run)
                     if new_data['site'] in run['filters']:
                         kalman = run['filters'][new_data['site']]
                         # The following temp_kill logic will kill the filter after a certain number of measuemrents gets ignored
@@ -88,7 +90,7 @@ class QueueManager:
                         # solved, this if-block should be removed.
                         if kalman['temp_kill'] > kalman['temp_kill_limit']:
                             self.logger.info("Restarted jammed filter {}".format(kalman['site']))
-                            kalman = DataStructures.get_empty_kalman_state(run)
+                            kalman = Config.get_empty_kalman_state(run)
                             run['filters'][new_data['site']] = kalman
 
                         measure_time = new_data['t']
@@ -103,7 +105,7 @@ class QueueManager:
 
     def time_grouper(self):
         run_data = {}
-        for run in DataStructures.inversion_runs:
+        for run in Config.inversion_runs:
             run_data[run['model']] = run
 
         while not self.terminated:
@@ -130,53 +132,62 @@ class QueueManager:
                     del self.time_grouped_messages[self.last_sent_data_timestamp]
 
     def output_generator(self):
-        credentials = pika.PlainCredentials(DataStructures.configuration['rabbit_mq_output']['userid'],
-                                            DataStructures.configuration['rabbit_mq_output']['password'])
-        parameters = pika.ConnectionParameters(DataStructures.configuration['rabbit_mq_output']['host'],
-                                               DataStructures.configuration['rabbit_mq_output']['port'],
-                                               DataStructures.configuration['rabbit_mq_output']['virtual_host'],
-                                               credentials)
-        connection = pika.BlockingConnection(parameters)
-        channel = connection.channel()
-        channel.exchange_declare(exchange=DataStructures.configuration['rabbit_mq_output']['exchange_name'],
-                                 type='topic', durable=True, auto_delete=False)
-
-        mongo_client = pymongo.MongoClient(DataStructures.configuration['mongo_db_output']['host'],
-                                           DataStructures.configuration['mongo_db_output']['port'])
-        odb = mongo_client.products
-        odb.authenticate(DataStructures.configuration['mongo_db_output']['userid'],
-                         DataStructures.configuration['mongo_db_output']['password'])
-        mongo_collection = odb.slip_inversion
         while not self.terminated:
-            try:
-                (output_data, model, tag) = self.completed_inversion_queue.get(timeout=1)
-                data_out = []
-                for d in output_data['data']:
-                    if d[4]:
-                        data_out.append([d[0], d[1], d[2]])
-                    else:
-                        data_out.append([d[0], 0., 0.])
-                output = {
-                    't': float(output_data['time']),
-                    'tag': tag,
-                    'model': model,
-                    'result': json.dumps({
-                        'estimates': [[x[0], x[7], x[8]] for x in output_data['estimates']],
-                        'slip': [x[8] for x in output_data['slip']],
-                        'data': data_out,
-                        'time': float(output_data['time']),
-                        'label': output_data['label'],
-                        'Mw': output_data['Magnitude'],
-                        'M': output_data['Moment']
-                    })
-                }
-                channel.basic_publish(exchange=DataStructures.configuration['rabbit_mq_output']['exchange_name'],
-                                      routing_key=DataStructures.configuration['rabbit_mq_output']['model'],
-                                      body=json.dumps(output))
-                self.logger.info(
-                    "Published data to RabbitMQ server for model {} timestamp {}.".format(output['model'], output['t']))
-                mongo_collection.insert(output)
-                self.logger.info(
-                    "Published data to MongoDB server for model {} timestamp {}.".format(output['model'], output['t']))
-            except queue.Empty:
-                pass
+            self.restart_output_generator = False
+            if Config.configuration['output_enabled']:
+                credentials = pika.PlainCredentials(Config.configuration['rabbit_mq_output']['userid'],
+                                                    Config.configuration['rabbit_mq_output']['password'])
+                parameters = pika.ConnectionParameters(Config.configuration['rabbit_mq_output']['host'],
+                                                       Config.configuration['rabbit_mq_output']['port'],
+                                                       Config.configuration['rabbit_mq_output']['virtual_host'],
+                                                       credentials)
+                connection = pika.BlockingConnection(parameters)
+                channel = connection.channel()
+                channel.exchange_declare(exchange=Config.configuration['rabbit_mq_output']['exchange_name'],
+                                         type='topic', durable=True, auto_delete=False)
+
+                mongo_client = pymongo.MongoClient(Config.configuration['mongo_db_output']['host'],
+                                                   Config.configuration['mongo_db_output']['port'])
+                odb = mongo_client.products
+                odb.authenticate(Config.configuration['mongo_db_output']['userid'],
+                                 Config.configuration['mongo_db_output']['password'])
+                mongo_collection = odb.slip_inversion
+                while not self.terminated and not self.restart_output_generator:
+                    try:
+                        (output_data, model, tag) = self.completed_inversion_queue.get(timeout=1)
+                        data_out = []
+                        for d in output_data['data']:
+                            if d[4]:
+                                data_out.append([d[0], d[1], d[2]])
+                            else:
+                                data_out.append([d[0], 0., 0.])
+                        output = {
+                            't': float(output_data['time']),
+                            'tag': tag,
+                            'model': model,
+                            'result': json.dumps({
+                                'estimates': [[x[0], x[7], x[8]] for x in output_data['estimates']],
+                                'slip': [x[8] for x in output_data['slip']],
+                                'data': data_out,
+                                'time': float(output_data['time']),
+                                'label': output_data['label'],
+                                'Mw': output_data['Magnitude'],
+                                'M': output_data['Moment']
+                            })
+                        }
+                        channel.basic_publish(exchange=Config.configuration['rabbit_mq_output']['exchange_name'],
+                                              routing_key=Config.configuration['rabbit_mq_output']['model'],
+                                              body=json.dumps(output))
+                        self.logger.info(
+                            "Published data to RabbitMQ server for model {} timestamp {}.".format(output['model'], output['t']))
+                        mongo_collection.insert(output)
+                        self.logger.info(
+                            "Published data to MongoDB server for model {} timestamp {}.".format(output['model'], output['t']))
+                    except queue.Empty:
+                        pass
+            else:
+                while not self.terminated:
+                    try:
+                        (output_data, model, tag) = self.completed_inversion_queue.get(timeout=1)
+                    except queue.Empty:
+                        pass

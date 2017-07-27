@@ -3,7 +3,7 @@ import Kalman
 import old_kalman
 import multiprocessing as mp
 import threading
-import DataStructures
+import Config
 import LiveFilter
 import time
 import logging
@@ -57,11 +57,11 @@ class TestKalmanFilter(unittest.TestCase):
                 old_kal.InitFilter(data_messages[-1]['gps_data']['t'])
                 old_kal.Init_Filter(ipipe[0], opipe[0], cpipe[0])
                 old_kal_thread = threading.Thread(target=old_kal.FilterOn)
-                old_kal.Wait = DataStructures.configuration['mes_wait']
-                old_kal.smoothing = DataStructures.configuration['eq_pause']
-                old_kal.MaxOffset = DataStructures.configuration['max_offset']
-                old_kal.EQThres = DataStructures.configuration['eq_threshold']
-                old_kal.defR = DataStructures.configuration['minimum_offset']
+                old_kal.Wait = Config.configuration['mes_wait']
+                old_kal.smoothing = Config.configuration['eq_pause']
+                old_kal.MaxOffset = Config.configuration['max_offset']
+                old_kal.EQThres = Config.configuration['eq_threshold']
+                old_kal.defR = Config.configuration['minimum_offset']
                 old_kal_thread.start()
 
                 new_kal_in = queue.Queue()
@@ -69,7 +69,7 @@ class TestKalmanFilter(unittest.TestCase):
                 new_kal = Kalman.KalmanThread(new_kal_in, new_kal_out)
                 new_kal.force_no_delta_t = True
                 new_kal.start()
-                new_kal_state = DataStructures.get_empty_kalman_state(lf.data_router.sites, lf.data_router.faults)
+                new_kal_state = Config.get_empty_kalman_state(lf.data_router.sites, lf.data_router.faults)
                 new_kal_state['site'] = data_messages[-1]['gps_data']['site']
 
                 old_data_back = []

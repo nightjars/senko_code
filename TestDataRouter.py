@@ -1,7 +1,7 @@
 import unittest
 import QueueManager
 import DataLoader
-import DataStructures
+import Config
 import threading
 import queue
 import ValidatorThread
@@ -26,15 +26,15 @@ def get_data(site_list, site=1, time=1):
 class TestDataRouter(unittest.TestCase):
     def setUp(self):
         self.config_data = DataLoader.load_data_from_text_files(
-            sites_data_file=DataStructures.configuration['sites_file'],
-            faults_data_file=DataStructures.configuration['faults_file'])
+            sites_data_file=Config.configuration['sites_file'],
+            faults_data_file=Config.configuration['faults_file'])
         self.sites, self.faults = (self.config_data['sites'], self.config_data['faults'])
         self.site_list = list(self.config_data['sites'].keys())
 
     def test_validation(self):
         router = QueueManager.QueueManager(self.sites, self.faults)
         threading.Thread(target=router.incoming_data_router).start()
-        data = DataStructures.get_gps_measurement_queue_message(gps_data=get_data(self.site_list))
+        data = Config.get_gps_measurement_queue_message(gps_data=get_data(self.site_list))
         router.input_data_queue.put(data)
         a = None
         try:
@@ -65,7 +65,7 @@ class TestDataRouter(unittest.TestCase):
         validator = ValidatorThread.default_validator(router.data_validator_queue,
                                                       router.kalman_initialize_queue, self.config_data)
         validator.start()
-        router.input_data_queue.put(DataStructures.get_gps_measurement_queue_message(gps_data=get_data(self.site_list)))
+        router.input_data_queue.put(Config.get_gps_measurement_queue_message(gps_data=get_data(self.site_list)))
         a = None
         try:
             a = router.kalman_start_queue.get(timeout=2)
@@ -78,17 +78,17 @@ class TestDataRouter(unittest.TestCase):
 
     def test_stale_kalman_start(self):
         router = QueueManager.QueueManager(self.sites, self.faults)
-        new_kalman = DataStructures.get_empty_kalman_state(self.sites, self.faults)
+        new_kalman = Config.get_empty_kalman_state(self.sites, self.faults)
         router.kalman_map[self.site_list[1]] = new_kalman
         gps_msg = get_data(self.site_list, time=1000)
-        new_kalman['last_calculation'] = gps_msg['t'] - DataStructures.configuration['kalman_stale'] - 1
+        new_kalman['last_calculation'] = gps_msg['t'] - Config.configuration['kalman_stale'] - 1
         new_kalman['testing_marker'] = True
         threading.Thread(target=router.incoming_data_router).start()
         threading.Thread(target=router.kalman_initializer).start()
         validator = ValidatorThread.default_validator(router.data_validator_queue,
                                                       router.kalman_initialize_queue, self.config_data)
         validator.start()
-        data = DataStructures.get_gps_measurement_queue_message(gps_data=gps_msg)
+        data = Config.get_gps_measurement_queue_message(gps_data=gps_msg)
         router.input_data_queue.put(data)
         a = None
         try:
@@ -104,13 +104,13 @@ class TestDataRouter(unittest.TestCase):
 
     def test_running_kalman_start(self):
         router = QueueManager.QueueManager(self.sites, self.faults)
-        new_kalman = DataStructures.get_empty_kalman_state(self.sites, self.faults)
+        new_kalman = Config.get_empty_kalman_state(self.sites, self.faults)
         router.kalman_map[self.site_list[1]] = new_kalman
         gps_msg = get_data(self.site_list, time=1000)
         new_kalman['last_calculation'] = gps_msg['t'] - 1
         with new_kalman['lock']:
             threading.Thread(target=router.incoming_data_router).start()
-            data = DataStructures.get_gps_measurement_queue_message(gps_data=gps_msg)
+            data = Config.get_gps_measurement_queue_message(gps_data=gps_msg)
             router.input_data_queue.put(data)
             a = None
             try:
@@ -126,14 +126,14 @@ class TestDataRouter(unittest.TestCase):
 
     def test_paused_kalman_start(self):
         router = QueueManager.QueueManager(self.sites, self.faults)
-        new_kalman = DataStructures.get_empty_kalman_state(self.sites, self.faults)
+        new_kalman = Config.get_empty_kalman_state(self.sites, self.faults)
         router.kalman_map[self.site_list[1]] = new_kalman
         gps_msg = get_data(self.site_list, time=1000)
-        new_kalman['last_calculation'] = gps_msg['t'] - DataStructures.configuration['kalman_stale']
+        new_kalman['last_calculation'] = gps_msg['t'] - Config.configuration['kalman_stale']
         new_kalman['testing_marker'] = True
         threading.Thread(target=router.incoming_data_router).start()
         threading.Thread(target=router.kalman_initializer).start()
-        data = DataStructures.get_gps_measurement_queue_message(gps_data=gps_msg)
+        data = Config.get_gps_measurement_queue_message(gps_data=gps_msg)
         router.input_data_queue.put(data)
         a = None
         try:
@@ -154,8 +154,8 @@ class TestDataRouter(unittest.TestCase):
             self.fail("New Kalman state was created for a paused Kalman filter, but shouldn't have been.")
 
     def test_time_grouper(self):
-        DataStructures.configuration['group_timespan'] = 1
-        DataStructures.configuration['delay_timespan'] = 15
+        Config.configuration['group_timespan'] = 1
+        Config.configuration['delay_timespan'] = 15
 
         router = QueueManager.QueueManager(self.sites, self.faults)
         threading.Thread(target=router.incoming_data_router).start()
@@ -164,13 +164,13 @@ class TestDataRouter(unittest.TestCase):
         output_queue = router.inverter_queue
         input_queue = router.time_grouping_queue
         now = calendar.timegm(time.gmtime())
-        input_queue.put((now, 11, DataStructures.get_grouped_inversion_queue_message(
+        input_queue.put((now, 11, Config.get_grouped_inversion_queue_message(
             kalman_output_data={'dummy': None},
-            gps_measurement_data={'dummy': [DataStructures.get_gps_measurement_queue_message(
+            gps_measurement_data={'dummy': [Config.get_gps_measurement_queue_message(
                 gps_data=get_data(self.site_list, time=now))]}
         )))
         for x in [now + y for y in [1, 2, 3, 13, 14, 15]]:
-            router.input_data_queue.put(DataStructures.get_gps_measurement_queue_message(
+            router.input_data_queue.put(Config.get_gps_measurement_queue_message(
                 gps_data=get_data(self.site_list, time=x)))
             time.sleep(1)
             a = None

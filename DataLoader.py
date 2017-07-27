@@ -1,10 +1,10 @@
 import logging
-import DataStructures
+import Config
 import Inverter
 
 
 def load_data_from_text_files():
-    for run in DataStructures.inversion_runs:
+    for run in Config.inversion_runs:
         sites_dict = {}
         with open (run['sites_file']) as file:
             sites = [x.split() for x in file.readlines() if x[0] != '#']

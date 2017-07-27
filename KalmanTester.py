@@ -2,7 +2,7 @@ import numpy as np
 import calendar
 import time
 import json
-import DataStructures
+import Config
 import copy
 from datetime import datetime as dt
 from datetime import timedelta as td
@@ -73,20 +73,20 @@ class RabbitMQPoller:
                     self.measurements[d['t']] = [d]
 
         connection = amqp.Connection(
-            host=DataStructures.configuration['rabbit_mq']['host'],
-            userid=DataStructures.configuration['rabbit_mq']['userid'],
-            password=DataStructures.configuration['rabbit_mq']['password'],
-            virtual_host=DataStructures.configuration['rabbit_mq']['virtual_host'],
-            exchange=DataStructures.configuration['rabbit_mq']['exchange_name']
+            host=Config.configuration['rabbit_mq']['host'],
+            userid=Config.configuration['rabbit_mq']['userid'],
+            password=Config.configuration['rabbit_mq']['password'],
+            virtual_host=Config.configuration['rabbit_mq']['virtual_host'],
+            exchange=Config.configuration['rabbit_mq']['exchange_name']
         )
         print ("about to connect")
         connection.connect()
         print("connected")
         channel = connection.channel()
-        channel.exchange_declare(DataStructures.configuration['rabbit_mq']['exchange_name'],
+        channel.exchange_declare(Config.configuration['rabbit_mq']['exchange_name'],
                                  'test_fanout', passive=True)
         queue_name = channel.queue_declare(exclusive=True)[0]
-        channel.queue_bind(queue_name, exchange=DataStructures.configuration['rabbit_mq']['exchange_name'])
+        channel.queue_bind(queue_name, exchange=Config.configuration['rabbit_mq']['exchange_name'])
         channel.basic_consume(callback=message_callback,
                               queue=queue_name,
                               no_ack=True)
@@ -1050,7 +1050,7 @@ def do_it():
             print("Time: {} ".format(data[0]['t']), end="")
             match = True
             nosendcount = 0
-            for inv_run in DataStructures.inversion_runs:
+            for inv_run in Config.inversion_runs:
                 result_count_new = 0
                 result_count_old = 0
                 print (" {} ".format(inv_run['model']), end="")
@@ -1065,7 +1065,7 @@ def do_it():
                             kal = inv_states[d['site']]['new']
                             o_kal = inv_states[d['site']]['old']
                         else:
-                            kal = DataStructures.get_empty_kalman_state(inv_run)
+                            kal = Config.get_empty_kalman_state(inv_run)
                             o_kal = OldKalman()
                             o_kal.Wait = inv_run['mes_wait']
                             o_kal.smoothing = inv_run['eq_pause']

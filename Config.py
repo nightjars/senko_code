@@ -4,6 +4,7 @@ import time
 import calendar
 import copy
 import numpy as np
+import Inverter
 
 configuration = {
     'kalman_url': 'http://www.panga.org/realtime/data/api/',  # Not used, maybe future?
@@ -34,143 +35,18 @@ configuration = {
 
     'kalman_default_lat': -120,
     'kalman_default_lon': 48,
+    'output_enabled': False
 }
 
-inversion_runs = [
-    {
-        'sites_file': './SA_offset.d',
-        'faults_file': './SA_faults.d',
-        'sites': None,
-        'faults': None,
-        'filters': None,
-        'model': 'SanAndreas-20x4',
-        'label': 'Refactor Version',
-        'tag': 'current',
-        'minimum_offset': 0.001,  # inverter config/validator/readonceconfig
-        'convergence': 320.,  # read once config
-        'eq_pause': 10.,
-        'eq_threshold': 0.01,
-        'strike_slip': False,
-        'mes_wait': 2,
-        'max_offset': 4000,
-        'offset': False,
-        'min_r': 0.0001,
-        'float_equality': 1e-9,
-        'inverter_configuration': {
-            'strike_slip': None,
-            'short_smoothing': True,
-            'smoothing': True,
-            'corner_fix': False,
-            'offsets_per_site': 3,
-            'subfault_len': 60.,
-            'subfault_wid': 30.,
-            'offset': None,
-            'sub_inputs': None,
-            'smooth_mat': None,
-            'mask': None
-        }
-    },
-    {
-        'sites_file': './CAS_offset.d',
-        'faults_file': './CAS_faults.d',
-        'sites': None,
-        'faults': None,
-        'filters': None,
-        'model': 'Cascadia-20x10',
-        'label': 'Refactor Version',
-        'tag': 'current',
-        'minimum_offset': 0.001,  # inverter config/validator/readonceconfig
-        'convergence': 45.,  # read once config
-        'eq_pause': 120.,
-        'eq_threshold': 1.,
-        'strike_slip': False,
-        'mes_wait': 2,
-        'max_offset': 100,
-        'offset': False,
-        'min_r': 0.0001,
-        'float_equality': 1e-9,
-        'inverter_configuration': {
-            'strike_slip': None,
-            'short_smoothing': True,
-            'smoothing': True,
-            'corner_fix': False,
-            'offsets_per_site': 3,
-            'subfault_len': 60.,
-            'subfault_wid': 30.,
-            'offset': None,
-            'sub_inputs': None,
-            'smooth_mat': None,
-            'mask': None
-        }
-    },
-    {
-        'sites_file': './MAT_offset.d',
-        'faults_file': './MAT_faults.d',
-        'sites': None,
-        'faults': None,
-        'filters': None,
-        'model': 'MAT-57x4',
-        'label': 'Refactor Version',
-        'tag': 'current',
-        'minimum_offset': 0.001,  # inverter config/validator/readonceconfig
-        'convergence': 320.,  # read once config
-        'eq_pause': 120.,
-        'eq_threshold': 1.,
-        'strike_slip': False,
-        'mes_wait': 2,
-        'max_offset': 100,
-        'offset': False,
-        'min_r': 0.0001,
-        'float_equality': 1e-9,
-        'inverter_configuration': {
-            'strike_slip': None,
-            'short_smoothing': True,
-            'smoothing': True,
-            'corner_fix': False,
-            'offsets_per_site': 3,
-            'subfault_len': 60.,
-            'subfault_wid': 30.,
-            'offset': None,
-            'sub_inputs': None,
-            'smooth_mat': None,
-            'mask': None
-        }
-    },
-    {
-        'sites_file': './NAZ_offset.d',
-        'faults_file': './NAZ_faults.d',
-        'sites': None,
-        'faults': None,
-        'filters': None,
-        'model': 'Nazca-40x4',
-        'label': 'Refactor Version',
-        'tag': 'current',
-        'minimum_offset': 0.001,  # inverter config/validator/readonceconfig
-        'convergence': 320.,  # read once config
-        'eq_pause': 120.,
-        'eq_threshold': .1,
-        'strike_slip': False,
-        'mes_wait': 2,
-        'max_offset': 100,
-        'offset': False,
-        'min_r': 0.0001,
-        'float_equality': 1e-9,
-        'inverter_configuration': {
-            'strike_slip': None,
-            'short_smoothing': True,
-            'smoothing': True,
-            'corner_fix': False,
-            'offsets_per_site': 3,
-            'subfault_len': 60.,
-            'subfault_wid': 30.,
-            'offset': None,
-            'sub_inputs': None,
-            'smooth_mat': None,
-            'mask': None
-        }
-    }
-]
+inversion_runs = []
 
+def add_inversion_run(run):
+    Inverter.config_generator(run)
+    run['filters'] = {}
+    inversion_runs.append(run)
+
+def remove_inversion_run(run):
+    inversion_runs.remove(run)
 
 def get_empty_kalman_state(run):
     delta_t = 1
