@@ -11,6 +11,7 @@ import pika
 import json
 import pymongo
 import RestAPI
+import LiveFilterDB
 
 class QueueManager:
     # deal with the lifecycle of data going through the system
@@ -55,6 +56,7 @@ class QueueManager:
         self.threads.append(threading.Thread(target=self.incoming_data_router))
         self.threads.append(threading.Thread(target=self.time_grouper))
         self.threads.append(threading.Thread(target=self.output_generator))
+        self.threads.append(threading.Thread(target=LiveFilterDB.work_table_watcher))
         self.threads.append(threading.Thread(target=RestAPI.app.run, kwargs={'port': 5002}))
         for thread in self.threads:
             thread.start()

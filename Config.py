@@ -43,8 +43,13 @@ def add_inversion_run(run):
     run['filters'] = {}
     inversion_runs.append(run)
 
-def remove_inversion_run(run):
-    inversion_runs.remove(run)
+def remove_inversion_run(run=None, inversion_id=None):
+    if run:
+        inversion_runs.remove(run)
+    if inversion_id:
+        for inversion in inversion_runs:
+            if inversion['id'] == inversion_id:
+                remove_inversion_run(run=inversion)
 
 def get_empty_kalman_state(run):
     delta_t = 1
