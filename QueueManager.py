@@ -47,9 +47,11 @@ class QueueManager:
             thread.stop()
             thread.join()
         self.logger.info("Worker threads shutdown.")
+        Config.queue_manager = None
 
     def start(self):
         self.logger.info("Data router starting.")
+        Config.queue_manager = self
         self.threads.append(threading.Thread(target=self.incoming_data_router))
         self.threads.append(threading.Thread(target=self.time_grouper))
         self.threads.append(threading.Thread(target=self.output_generator))

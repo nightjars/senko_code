@@ -25,10 +25,7 @@ configuration = {
                         'port': 27018,
                         'userid': 'nif',
                         'password': 'nars0add'},
-    'kalman_stale': 30,  # (seconds) Time before kalman states are wiped
-    'group_timespan': 1,  # (seconds) Group batches of data in timespan
     'delay_timespan': 15,  # (seconds) Time to wait for laggard data
-    'idle_sleep_time': 0.1,  # (seconds) Time to sleep to avoid busy wait loops
 
     'max_kalman_threads': 30,
     'max_inverter_threads': 1,
@@ -39,6 +36,7 @@ configuration = {
 }
 
 inversion_runs = []
+queue_manager = None
 
 def add_inversion_run(run):
     Inverter.config_generator(run)
