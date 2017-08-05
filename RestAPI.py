@@ -31,6 +31,13 @@ class Inversion(Resource):
             abort(400)
         req = flask.request.json
 
+class Faults(Resource):
+    def post(self):
+        if not flask.request.json:
+            abort(400)
+        req = flask.request.json
+        db = LiveFilterDB.get_db()
+        LiveFilterDB.replace_fault_data(db, req['inversion'], req['faults'])
 
 class Status(Resource):
     def get(self):
@@ -72,6 +79,7 @@ class Status(Resource):
 api.add_resource(Inversions, '/inversions')
 api.add_resource(Inversion, '/inversion/<inversion_id>')
 api.add_resource(Status, '/status')
+api.add_resource(Faults, '/faults')
 
 if __name__ == "__main__":
     app.run(port='5002')

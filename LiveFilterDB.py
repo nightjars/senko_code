@@ -151,7 +151,7 @@ def create_work_table(db):
     # process faults for an inversion
     # add new site to existing inversions
 
-    c = db.cursor
+    c = db.cursor()
     c.execute("DROP TABLE IF EXISTS pending_work")
     c.execute('''CREATE TABLE pending_work
                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -173,10 +173,10 @@ def create_users_table(db, default_user='admin', default_password='admin'):
 
 def replace_fault_data(db, inversion_id, faults):
     c = db.cursor()
-    Config.remove_inversion_run(inversion_id)
+    Config.remove_inversion_run(inversion_id=inversion_id)
     c.execute('''DELETE FROM faults WHERE inversion_id = {}'''.format(int(inversion_id)))
     c.execute('''DELETE FROM site_offset_join WHERE inversion_id = {}'''.format(int(inversion_id)))
-    c.execute('''UPDATE inversions fault_len = {}, fault_wid = {} WHERE inversion_id = {}'''.format(
+    c.execute('''UPDATE inversions SET fault_len = {}, fault_wid = {} WHERE id = {}'''.format(
         faults['length'], faults['width'], inversion_id))
     for idx, fault in enumerate(faults['subfault_list']):
         while len(fault) < 8:
@@ -319,13 +319,13 @@ def populate_offsets(db, inversion_id = None):
     join_cur = db.cursor()
     inversion_list = [inversion_id] if inversion_id is not None else \
                      inv_cur.execute('SELECT id FROM inversions').fetchall()
-    for inversion in inv_cur.execute('SELECT id FROM inversions'):
+    for inversion in inversion_list:
         for station in station_cur.execute('SELECT site_name, lat, lon, ele FROM sites'):
             (site_name, site_lat, site_lon, site_ele) = station
             max_mag = 0
             for fault in fault_cur.execute('SELECT * FROM faults WHERE inversion_id = {}'.format(inversion[0])):
                 (fault_id, fault_seq, inv_id, fault_lat, fault_lon, fault_depth, fault_strike, fault_dip,
-                 fault_len, fault_wid) = fault
+                 fault_len, fault_wid, unknown_value) = fault
                 slip = 1  # from example usage, not sure what this means
                 rake = 180  # from example usage, not sure why real rake value isn't used
                 mag = float(dist_filt.adp(fault_lat, fault_lon, fault_depth, fault_strike, fault_dip,
@@ -429,17 +429,18 @@ def get_db():
 
 def work_table_watcher():
     db = get_db()
-    c = db.cursor
     while True:
-        c.execute('''SELECT (id, site, inversion_id) FROM pending_work''')
-        work = c.fetchone()
+        with db.cursor as c:
+            work = c.execute('''SELECT id, site, inversion_id FROM pending_work''').fetchone()
+            db.commit()
         if work:
             if work[1]:
                 pass
             if work[2]:
                 populate_offsets(db, inversion_id=work[2])
-        c.execute('''DELETE FROM pending_work WHERE id = {}'''.format(work[0]))
-        db.commit()
+            with db.cursor as c:
+                c.execute('''DELETE FROM pending_work WHERE id = {}'''.format(work[0]))
+            db.commit()
         time.sleep(1)
 
 
